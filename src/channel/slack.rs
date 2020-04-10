@@ -1,8 +1,17 @@
-pub struct Slack {}
+mod client;
+
+pub struct Slack {
+    client: client::Client,
+}
 
 pub fn new() -> Box<Slack> {
     eprintln!("slack::new()");
-    return Box::new(Slack {});
+
+    let channel = Slack {
+        client: client::new(),
+    };
+
+    return Box::new(channel);
 }
 
 impl super::Channel for Slack {
