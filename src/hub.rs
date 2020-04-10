@@ -18,7 +18,10 @@ pub fn new(name: &str) -> Hub {
 }
 
 impl Hub {
-    pub fn run(&self) {
+    pub fn run(&mut self) {
         info!("running things from hub named {}", self.name);
+        for c in &mut self.channels {
+            c.start();
+        }
     }
 }

@@ -8,6 +8,6 @@ mod hub;
 fn main() {
     pretty_env_logger::init();
 
-    let hub = hub::new("synergy");
+    let mut hub = hub::new("synergy");
     hub.run()
 }

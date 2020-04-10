@@ -15,7 +15,8 @@ pub fn new() -> Box<Slack> {
 }
 
 impl super::Channel for Slack {
-    fn start(&self) {
+    fn start(&mut self) {
         info!("starting slack channel");
+        self.client.connect().unwrap();
     }
 }
