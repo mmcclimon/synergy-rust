@@ -5,7 +5,7 @@ pub struct Slack {
 }
 
 pub fn new() -> Box<Slack> {
-    eprintln!("slack::new()");
+    debug!("slack::new()");
 
     let channel = Slack {
         client: client::new(),
@@ -16,6 +16,6 @@ pub fn new() -> Box<Slack> {
 
 impl super::Channel for Slack {
     fn start(&self) {
-        println!("starting slack channel");
+        info!("starting slack channel");
     }
 }

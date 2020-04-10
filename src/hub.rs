@@ -19,6 +19,6 @@ pub fn new(name: &str) -> Hub {
 
 impl Hub {
     pub fn run(&self) {
-        println!("running things from hub named {}", self.name);
+        info!("running things from hub named {}", self.name);
     }
 }
