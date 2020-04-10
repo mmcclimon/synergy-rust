@@ -1,6 +1,7 @@
 use reqwest::Url;
 use serde::Deserialize;
 use std::error::Error;
+use std::fmt;
 
 pub struct Client {
     api_key: String,
@@ -24,6 +25,17 @@ pub fn new() -> Client {
     };
     return c;
 }
+
+#[derive(Debug)]
+struct SlackInternalError(String);
+
+impl fmt::Display for SlackInternalError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Error while talking to slack: {}", self.0)
+    }
+}
+
+impl Error for SlackInternalError {}
 
 impl Client {
     pub fn connect(&mut self) -> Result<(), Box<dyn Error>> {
@@ -51,6 +63,15 @@ impl Client {
         let data: ConnectResp = client.get(url).send()?.json()?;
 
         println!("{:?}", data);
+
+        if !data.ok {
+            return Err(Box::new(SlackInternalError(
+                "bad data from connect".to_string(),
+            )));
+        }
+
+        self.our_name = data.me.name;
+        self.our_id = data.me.id;
 
         Ok(())
     }
