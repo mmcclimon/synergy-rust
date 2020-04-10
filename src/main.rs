@@ -3,5 +3,6 @@ mod synergy;
 use synergy::hub;
 
 fn main() {
-    hub::run();
+    let hub = hub::new("synergy");
+    hub.run()
 }
