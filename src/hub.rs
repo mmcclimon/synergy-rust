@@ -1,4 +1,4 @@
-use super::channel;
+use crate::channel;
 
 pub struct Hub {
     name: String,
