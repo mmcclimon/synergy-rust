@@ -1,5 +1,7 @@
 mod client;
 
+use std::sync::mpsc;
+
 pub struct Slack {
     client: client::Client,
 }
@@ -17,6 +19,6 @@ pub fn new() -> Box<Slack> {
 impl super::Channel for Slack {
     fn start(&mut self) {
         info!("starting slack channel");
-        self.client.connect().unwrap();
+        self.client.listen();
     }
 }
