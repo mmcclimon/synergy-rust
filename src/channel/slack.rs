@@ -16,11 +16,11 @@ pub fn new() -> Box<Slack> {
 }
 
 impl crate::channel::Channel for Slack {
-    fn start(&mut self, tx: mpsc::Sender<event::Event>) {
+    fn start(&self, events_channel: mpsc::Sender<event::Event>) {
         info!("starting slack channel");
 
         let (tx, rx) = mpsc::channel();
-        let mut client = client::new();
+        let client = client::new();
 
         let handle = thread::spawn(move || {
             client.listen(tx);
@@ -28,6 +28,8 @@ impl crate::channel::Channel for Slack {
 
         for raw_event in rx {
             debug!("got raw event: {:?}", raw_event);
+            let e = event::Event {};
+            events_channel.send(e).unwrap();
         }
 
         handle.join().unwrap();

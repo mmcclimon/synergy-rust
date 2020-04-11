@@ -1,6 +1,6 @@
 use reqwest::Url;
 use serde::Deserialize;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::error::Error;
 use std::fmt;
 use std::sync::mpsc;
@@ -10,11 +10,10 @@ type Websocket = tungstenite::protocol::WebSocket<tungstenite::client::AutoStrea
 #[derive(Debug)]
 pub struct Client {
     api_key: String,
-    our_name: Option<String>,
-    our_id: Option<String>,
-    connected: bool,
+    our_name: RefCell<Option<String>>,
+    our_id: RefCell<Option<String>>,
+    connected: Cell<bool>,
     is_ready: bool,
-    ws: Option<RefCell<Websocket>>,
     // eventually: more things
 }
 
@@ -40,11 +39,10 @@ pub fn new() -> Client {
 
     let c = Client {
         api_key: api_token.to_string(),
-        our_name: None,
-        our_id: None,
-        connected: false,
+        our_name: RefCell::new(None),
+        our_id: RefCell::new(None),
+        connected: Cell::new(false),
         is_ready: false,
-        ws: None,
     };
     return c;
 }
@@ -61,7 +59,7 @@ impl fmt::Display for SlackInternalError {
 impl Error for SlackInternalError {}
 
 impl Client {
-    fn connect(&mut self) -> Result<(), Box<dyn Error>> {
+    fn connect(&self) -> Result<Websocket, Box<dyn Error>> {
         // using blocking here because I think I'm going to do the concurrent
         // stuff a different way.
         let mut url = Url::parse("https://slack.com/api/rtm.connect")?;
@@ -91,26 +89,20 @@ impl Client {
             )));
         }
 
-        self.our_name = data.me.name;
-        self.our_id = data.me.id;
+        self.our_name.replace(data.me.name);
+        self.our_id.replace(data.me.id);
 
         let (websocket, _resp) = tungstenite::client::connect(data.url)?;
 
-        self.ws = Some(RefCell::new(websocket));
-        self.connected = true;
+        self.connected.set(true);
 
         info!("connected to slack");
 
-        Ok(())
+        Ok(websocket)
     }
 
-    pub fn listen(&mut self, tx: mpsc::Sender<RawEvent>) -> ! {
-        if self.ws.is_none() {
-            self.connect().expect("Could not connect to slack!");
-        }
-
-        let raw = self.ws.as_mut().expect("no websocket?");
-        let mut ws = raw.borrow_mut();
+    pub fn listen(&self, tx: mpsc::Sender<RawEvent>) -> ! {
+        let mut ws = self.connect().expect("Could not connect to slack!");
 
         loop {
             let message = match ws.read_message() {
@@ -140,7 +132,7 @@ impl Client {
             };
 
             // debug!("got event {:?}", event);
-            tx.send(event);
+            tx.send(event).unwrap();
         }
     }
 }

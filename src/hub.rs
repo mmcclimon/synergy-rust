@@ -21,24 +21,27 @@ pub fn new(name: &str) -> Hub {
 }
 
 impl Hub {
-    pub fn run(&'static mut self) {
+    pub fn run(&self) {
         info!("running things from hub named {}", self.name);
 
         let (tx, rx) = channel();
 
-        let handles = vec![];
-        for c in self.channels {
+        // let mut handles = vec![];
+        for c in &self.channels {
             let event_channel = tx.clone();
-            let handle = thread::spawn(move || c.start(event_channel));
-            handles.push(handle);
+            c.start(event_channel)
+            // let handle = thread::spawn(move || c.start(event_channel));
+            // handles.push(handle);
         }
 
         for event in rx {
             debug!("got event: {:?}", event);
         }
 
+        /*
         for handle in handles {
             handle.join().unwrap();
         }
+        */
     }
 }
