@@ -18,10 +18,20 @@ pub struct Client {
     // eventually: more things
 }
 
-#[derive(Debug)]
-enum WsMessage {
-    Text(String),
-    Close,
+// This is a raw message event, and only matches messages, because that's the
+// only thing we care about. Other things will try to deserialize to this and
+// not be able to, in which case we'll just ignore it. That's not the "proper"
+// way to do it, but gets us up and running.
+#[derive(Deserialize, Debug)]
+pub struct RawEvent {
+    ts: String,
+    #[serde(rename = "type")]
+    kind: String,
+    subtype: Option<String>,
+    channel: String,
+    text: String,
+    user: String,
+    bot_id: Option<String>,
 }
 
 pub fn new() -> Client {
@@ -75,8 +85,6 @@ impl Client {
 
         let data: ConnectResp = client.get(url).send()?.json()?;
 
-        println!("{:?}", data);
-
         if !data.ok {
             return Err(Box::new(SlackInternalError(
                 "bad data from connect".to_string(),
@@ -108,12 +116,30 @@ impl Client {
             let message = match ws.read_message() {
                 Ok(m) => m,
                 Err(e) => {
-                    debug!("{:?}", e);
+                    info!("error reading from websocket: {:?}", e);
                     continue;
                 }
             };
 
-            debug!("got frame {:?}", message);
+            let frame = match message {
+                tungstenite::Message::Text(ref s) => s,
+                tungstenite::Message::Close(_) => {
+                    info!("got close message; figure out what to do here");
+                    continue;
+                }
+                // ignore everything else (ping/pong/binary)
+                _ => continue,
+            };
+
+            let event: RawEvent = match serde_json::from_str(frame) {
+                Ok(re) => re,
+                Err(e) => {
+                    trace!("error derializing frame {}: {}", frame, e);
+                    continue;
+                }
+            };
+
+            debug!("got event {:?}", event);
         }
     }
 }
