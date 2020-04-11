@@ -2,6 +2,7 @@
 extern crate log;
 
 mod channel;
+mod config;
 mod event;
 mod hub;
 mod logger;
@@ -9,6 +10,9 @@ mod logger;
 fn main() {
     logger::init();
 
-    let hub = hub::new("synergy");
+    let config = config::new("config.toml");
+
+    let hub = hub::new(config);
+
     hub.run();
 }

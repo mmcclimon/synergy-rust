@@ -33,10 +33,7 @@ pub struct RawEvent {
     bot_id: Option<String>,
 }
 
-pub fn new() -> Client {
-    let api_token =
-        option_env!("SLACK_API_TOKEN").expect("Must have SLACK_API_TOKEN in environment!");
-
+pub fn new(api_token: String) -> Client {
     let c = Client {
         api_key: api_token.to_string(),
         our_name: RefCell::new(None),
@@ -44,6 +41,7 @@ pub fn new() -> Client {
         connected: Cell::new(false),
         is_ready: false,
     };
+
     return c;
 }
 
