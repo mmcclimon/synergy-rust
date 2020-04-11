@@ -1,5 +1,4 @@
 use std::sync::mpsc::channel;
-use std::thread;
 
 use crate::channel;
 
@@ -26,22 +25,19 @@ impl Hub {
 
         let (tx, rx) = channel();
 
-        // let mut handles = vec![];
+        let mut handles = vec![];
         for c in &self.channels {
             let event_channel = tx.clone();
-            c.start(event_channel)
-            // let handle = thread::spawn(move || c.start(event_channel));
-            // handles.push(handle);
+            let handle = c.start(event_channel);
+            handles.push(handle);
         }
 
         for event in rx {
             debug!("got event: {:?}", event);
         }
 
-        /*
         for handle in handles {
             handle.join().unwrap();
         }
-        */
     }
 }
