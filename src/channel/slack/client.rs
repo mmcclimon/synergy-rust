@@ -104,7 +104,7 @@ impl Client {
         Ok(())
     }
 
-    pub fn listen(&mut self /* tx: mpsc::Sender<WsMessage> */) -> ! {
+    pub fn listen(&mut self, tx: mpsc::Sender<RawEvent>) -> ! {
         if self.ws.is_none() {
             self.connect().expect("Could not connect to slack!");
         }
@@ -139,7 +139,8 @@ impl Client {
                 }
             };
 
-            debug!("got event {:?}", event);
+            // debug!("got event {:?}", event);
+            tx.send(event);
         }
     }
 }

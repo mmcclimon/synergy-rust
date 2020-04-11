@@ -1,3 +1,6 @@
+use std::sync::mpsc::channel;
+use std::thread;
+
 use crate::channel;
 
 pub struct Hub {
@@ -18,10 +21,24 @@ pub fn new(name: &str) -> Hub {
 }
 
 impl Hub {
-    pub fn run(&mut self) {
+    pub fn run(&'static mut self) {
         info!("running things from hub named {}", self.name);
-        for c in &mut self.channels {
-            c.start();
+
+        let (tx, rx) = channel();
+
+        let handles = vec![];
+        for c in self.channels {
+            let event_channel = tx.clone();
+            let handle = thread::spawn(move || c.start(event_channel));
+            handles.push(handle);
+        }
+
+        for event in rx {
+            debug!("got event: {:?}", event);
+        }
+
+        for handle in handles {
+            handle.join().unwrap();
         }
     }
 }

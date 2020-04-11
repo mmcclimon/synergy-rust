@@ -3,11 +3,12 @@ extern crate pretty_env_logger;
 extern crate log;
 
 mod channel;
+mod event;
 mod hub;
 
 fn main() {
     pretty_env_logger::init();
 
     let mut hub = hub::new("synergy");
-    hub.run()
+    hub.run();
 }

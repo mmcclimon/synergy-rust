@@ -1,5 +1,9 @@
 pub mod slack;
 
+use std::sync::mpsc;
+
+use crate::event;
+
 pub trait Channel {
-    fn start(&mut self);
+    fn start(&'static mut self, tx: mpsc::Sender<event::Event>);
 }
