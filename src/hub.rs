@@ -20,8 +20,6 @@ pub fn new(config: Config) -> Hub {
         environment: environment::new(&config),
     };
 
-    println!("{:?}", hub.environment);
-
     for (name, cfg) in &config.channels {
         let constructor = match cfg.class {
             channel::Type::SlackChannel => channel::slack::new,

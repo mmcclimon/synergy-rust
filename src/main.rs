@@ -8,6 +8,7 @@ mod environment;
 mod event;
 mod hub;
 mod logger;
+mod user;
 mod user_directory;
 
 use std::env;
