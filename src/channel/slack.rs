@@ -3,15 +3,15 @@ mod client;
 use std::sync::mpsc;
 use std::thread;
 
-use crate::channel;
-use crate::event;
+use crate::channel::{Channel, ChannelConfig};
+use crate::event::{Event, EventType};
 
 pub struct Slack {
     name: String,
     api_token: String,
 }
 
-pub fn new(name: String, cfg: &channel::ChannelConfig) -> Box<Slack> {
+pub fn new(name: String, cfg: &ChannelConfig) -> Box<Slack> {
     let api_token = &cfg.extra["api_token"]
         .as_str()
         .expect("no api token in config!");
@@ -24,8 +24,12 @@ pub fn new(name: String, cfg: &channel::ChannelConfig) -> Box<Slack> {
     return Box::new(channel);
 }
 
-impl crate::channel::Channel for Slack {
-    fn start(&self, events_channel: mpsc::Sender<event::Event>) -> thread::JoinHandle<()> {
+impl Channel for Slack {
+    fn name(&self) -> String {
+        self.name.clone()
+    }
+
+    fn start(&self, events_channel: mpsc::Sender<Event>) -> thread::JoinHandle<()> {
         info!("starting slack channel {}", self.name);
 
         // we take a copy here to avoid moving &self into the thread.
@@ -38,8 +42,17 @@ impl crate::channel::Channel for Slack {
             thread::spawn(move || client.listen(tx));
 
             for raw_event in rx {
-                debug!("got raw event: {:?}", raw_event);
-                let e = event::Event {};
+                let e = Event {
+                    kind: EventType::Message,
+                    // TODO: fill these in properly
+                    from_user: None, // TODO
+                    text: raw_event.text,
+                    is_public: false,
+                    was_targeted: true,
+                    from_address: raw_event.user,
+                    conversation_address: raw_event.channel,
+                    from_channel: String::from("slack"),
+                };
                 events_channel.send(e).unwrap();
             }
         });

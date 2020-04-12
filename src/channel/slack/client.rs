@@ -25,11 +25,11 @@ pub struct Client {
 pub struct RawEvent {
     ts: String,
     #[serde(rename = "type")]
-    kind: String,
-    subtype: Option<String>,
-    channel: String,
-    text: String,
-    user: String,
+    pub kind: String,
+    pub subtype: Option<String>,
+    pub channel: String,
+    pub text: String,
+    pub user: String,
     bot_id: Option<String>,
 }
 
