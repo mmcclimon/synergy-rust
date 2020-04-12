@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::{Rc, Weak};
 
-use rusqlite::{types::Value, NO_PARAMS};
+use rusqlite::NO_PARAMS;
 
 use crate::environment::Environment;
 use crate::user::User;
@@ -34,36 +34,15 @@ impl Directory {
         let db = &env.unwrap().db;
         let mut stmt = db.prepare("SELECT * FROM users").unwrap();
 
-        fn bool_from(val: Value) -> bool {
-            match val {
-                Value::Integer(n) => n != 0,
-                _ => false,
-            }
-        }
-
-        let users = stmt.query_map(NO_PARAMS, |row| {
-            Ok(User {
-                username: row.get_unwrap(0),
-                lp_id: match row.get_unwrap(1) {
-                    Value::Null => None,
-                    Value::Text(s) => Some(s),
-                    _ => {
-                        debug!("weird value for lp_id!");
-                        None
-                    }
-                },
-                is_master: bool_from(row.get_unwrap(2)),
-                is_virtual: bool_from(row.get_unwrap(3)),
-                is_deleted: bool_from(row.get_unwrap(4)),
-                identities: RefCell::new(HashMap::new()),
-            })
-        });
+        let iter = stmt
+            .query_map(NO_PARAMS, |row| Ok(User::from(row)))
+            .unwrap();
 
         // fill up our directory
-        for user in users.unwrap() {
-            let u = user.unwrap();
-            let name = u.username.clone();
-            self.users.borrow_mut().insert(name, u);
+        for maybe_user in iter {
+            let user = maybe_user.unwrap();
+            let name = user.username.clone();
+            self.users.borrow_mut().insert(name, user);
         }
 
         self.load_identities(&db);
