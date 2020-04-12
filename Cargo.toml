@@ -9,6 +9,7 @@ edition = "2018"
 [dependencies]
 log = "0.4.8"
 env_logger = "0.7.1"
+getopts = "0.2.21"  # I think eventually I want to use clap, but this is ok for now
 reqwest = { version = "0.10", features = ["blocking", "json"] }
 rusqlite = "0.22.0"
 serde = { version = "1.0.106", features = [ "derive" ] }
