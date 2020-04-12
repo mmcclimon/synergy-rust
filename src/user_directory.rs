@@ -1,6 +1,8 @@
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 
+use rusqlite::{types::Value, NO_PARAMS};
+
 use crate::environment::Environment;
 
 #[derive(Debug)]
@@ -17,14 +19,13 @@ impl Directory {
         dir
     }
 
+    // TODO: this should return a result.
     pub fn load_users(&self) {
-        let _db = match self.env.borrow().upgrade() {
-            Some(ref env) => &env.db,
-            None => {
-                warn!("db disappeared out from under us!");
-                return;
-            }
-        };
+        let env = self.env.borrow().upgrade();
+        if env.is_none() {
+            warn!("db disappeared out from under us!");
+            return;
+        }
 
         info!("TODO: load users");
     }

@@ -1,19 +1,18 @@
-use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
 
-use sqlite;
+use rusqlite::{Connection, NO_PARAMS};
 
 use crate::config::Config;
 use crate::user_directory::Directory;
 
 pub struct Environment {
-    pub db: sqlite::Connection,
+    pub db: Connection,
     user_directory: Rc<Directory>,
 }
 
 pub fn new(config: &Config) -> Rc<Environment> {
-    let conn = sqlite::open(&config.state_dbfile).expect("Could not open dbfile!");
+    let conn = Connection::open(&config.state_dbfile).expect("Could not open dbfile!");
 
     // make the user directory first, with an empty env (internally). Once we
     // have constructed ourselves with a strong ref to the directory, we'll
@@ -46,37 +45,40 @@ impl Environment {
     fn maybe_create_state_tables(&self) {
         self.db
             .execute(
-                "CREATE TABLE IF NOT EXISTS synergy_state (
-                    reactor_name TEXT PRIMARY KEY,
-                    stored_at INTEGER NOT NULL,
-                    json TEXT NOT NULL
+                "CREATE TABLE IF NOT EXISTS synergy_state (\n  \
+                    reactor_name TEXT PRIMARY KEY,\n  \
+                    stored_at INTEGER NOT NULL,\n  \
+                    json TEXT NOT NULL\n\
                     );",
+                NO_PARAMS,
             )
             .unwrap();
 
         self.db
             .execute(
-                "CREATE TABLE IF NOT EXISTS users (
-                    username TEXT PRIMARY KEY,
-                    lp_id TEXT,
-                    is_master INTEGER DEFAULT 0,
-                    is_virtual INTEGER DEFAULT 0,
-                    is_deleted INTEGER DEFAULT 0
+                "CREATE TABLE IF NOT EXISTS users (\n  \
+                    username TEXT PRIMARY KEY,\n  \
+                    lp_id TEXT,\n  \
+                    is_master INTEGER DEFAULT 0,\n  \
+                    is_virtual INTEGER DEFAULT 0,\n  \
+                    is_deleted INTEGER DEFAULT 0\n\
                 );",
+                NO_PARAMS,
             )
             .unwrap();
 
         self.db
             .execute(
-                "CREATE TABLE IF NOT EXISTS user_identities (
-                    id INTEGER PRIMARY KEY,
-                    username TEXT NOT NULL,
-                    identity_name TEXT NOT NULL,
-                    identity_value TEXT NOT NULL,
-                    FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE,
-                    CONSTRAINT constraint_username_identity UNIQUE (username, identity_name),
-                    UNIQUE (identity_name, identity_value)
+                "CREATE TABLE IF NOT EXISTS user_identities (\n  \
+                    id INTEGER PRIMARY KEY,\n  \
+                    username TEXT NOT NULL,\n  \
+                    identity_name TEXT NOT NULL,\n  \
+                    identity_value TEXT NOT NULL,\n  \
+                    FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE,\n  \
+                    CONSTRAINT constraint_username_identity UNIQUE (username, identity_name),\n  \
+                    UNIQUE (identity_name, identity_value)\n\
                 );",
+                NO_PARAMS,
             )
             .unwrap();
     }
