@@ -109,37 +109,35 @@ impl Slack {
     }
 }
 
-fn listen(mut ws: Websocket, tx: mpsc::Sender<RawEvent>) -> ! {
-    loop {
-        let message = match ws.read_message() {
-            Ok(m) => m,
-            Err(e) => {
-                info!("error reading from websocket: {:?}", e);
-                continue;
-            }
-        };
+fn process_ws_message(raw: Result<tungstenite::Message, tungstenite::Error>) -> Option<RawEvent> {
+    let message = match raw {
+        Ok(m) => m,
+        Err(e) => {
+            info!("error reading from websocket: {:?}", e);
+            return None;
+        }
+    };
 
-        let frame = match message {
-            tungstenite::Message::Text(ref s) => s,
-            tungstenite::Message::Close(_) => {
-                info!("got close message; figure out what to do here");
-                continue;
-            }
-            // ignore everything else (ping/pong/binary)
-            _ => continue,
-        };
+    let frame = match message {
+        tungstenite::Message::Text(ref s) => s,
+        tungstenite::Message::Close(_) => {
+            info!("got close message; figure out what to do here");
+            return None;
+        }
+        // ignore everything else (ping/pong/binary)
+        _ => return None,
+    };
 
-        let event: RawEvent = match serde_json::from_str(frame) {
-            Ok(re) => re,
-            Err(e) => {
-                trace!("error derializing frame {}: {}", frame, e);
-                continue;
-            }
-        };
+    let event: RawEvent = match serde_json::from_str(frame) {
+        Ok(re) => re,
+        Err(e) => {
+            trace!("error derializing frame {}: {}", frame, e);
+            return None;
+        }
+    };
 
-        // debug!("got event {:?}", event);
-        tx.send(event).unwrap();
-    }
+    // debug!("got event {:?}", event);
+    return Some(event);
 }
 
 impl Channel for Slack {
@@ -150,13 +148,17 @@ impl Channel for Slack {
     fn start(&self, events_channel: mpsc::Sender<Event>) -> thread::JoinHandle<()> {
         info!("starting slack channel {}", self.name);
 
-        let ws = self.get_websocket().expect("Error connecting to slack!");
+        let mut ws = self.get_websocket().expect("Error connecting to slack!");
 
-        let (tx, rx) = mpsc::channel();
-        let ws_handle = thread::spawn(move || listen(ws, tx));
+        let name = self.name.clone();
 
         let handle = std::thread::spawn(move || {
-            for raw_event in rx {
+            loop {
+                let raw_event = match process_ws_message(ws.read_message()) {
+                    Some(raw) => raw,
+                    None => continue,
+                };
+
                 let e = Event {
                     kind: EventType::Message,
                     // TODO: fill these in properly
@@ -166,13 +168,11 @@ impl Channel for Slack {
                     was_targeted: true,
                     from_address: raw_event.user,
                     conversation_address: raw_event.channel,
-                    from_channel_name: String::from("slack"),
+                    from_channel_name: name.clone(),
                 };
 
                 events_channel.send(e).unwrap();
             }
-
-            ws_handle.join().unwrap();
         });
 
         handle
