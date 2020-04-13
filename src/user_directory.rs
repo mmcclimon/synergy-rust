@@ -15,12 +15,10 @@ pub struct Directory {
 
 impl Directory {
     pub fn new() -> Rc<Directory> {
-        let dir = Rc::new(Directory {
+        Rc::new(Directory {
             env: RefCell::new(Weak::new()),
             users: RefCell::new(HashMap::new()),
-        });
-
-        dir
+        })
     }
 
     // TODO: this should return a result.

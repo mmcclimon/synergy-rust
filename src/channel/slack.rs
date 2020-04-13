@@ -57,14 +57,14 @@ pub fn new(name: String, cfg: &ChannelConfig, env: Weak<Environment>) -> Box<Sla
         .expect("no api token in config!");
 
     let channel = Slack {
-        name: name,
+        name,
         api_token: api_token.to_string(),
         our_id: RefCell::new(None),
         our_name: RefCell::new(None),
         _env: RefCell::new(env),
     };
 
-    return Box::new(channel);
+    Box::new(channel)
 }
 
 impl Slack {
@@ -175,6 +175,6 @@ impl Channel for Slack {
             ws_handle.join().unwrap();
         });
 
-        return handle;
+        handle
     }
 }

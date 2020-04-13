@@ -44,13 +44,13 @@ impl From<&rusqlite::Row<'_>> for User {
         let is_virtual = bool_from(row.get_unwrap("is_virtual"));
         let is_deleted = bool_from(row.get_unwrap("is_deleted"));
 
-        return User {
-            username: username,
-            lp_id: lp_id,
-            is_master: is_master,
-            is_virtual: is_virtual,
-            is_deleted: is_deleted,
+        User {
+            username,
+            lp_id,
+            is_master,
+            is_virtual,
+            is_deleted,
             identities: RefCell::new(HashMap::new()),
-        };
+        }
     }
 }

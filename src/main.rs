@@ -32,7 +32,7 @@ fn main() {
     };
 
     if matches.opt_present("help") {
-        let prog_name = env::args().nth(0).unwrap();
+        let prog_name = env::args().next().unwrap();
         let brief = format!("Usage: {} [options]", prog_name);
         print!("{}", opt.usage(&brief));
         process::exit(0);

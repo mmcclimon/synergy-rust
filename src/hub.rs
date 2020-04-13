@@ -43,7 +43,7 @@ impl Hub {
         let (tx, rx) = mpsc::channel();
 
         let mut handles = vec![];
-        for (_, c) in &self.channels {
+        for c in self.channels.values() {
             let event_channel = tx.clone();
             let handle = c.start(event_channel);
             handles.push(handle);
