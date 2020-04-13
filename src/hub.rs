@@ -4,10 +4,12 @@ use std::sync::{mpsc, Arc, RwLock};
 use crate::channel;
 use crate::config::Config;
 use crate::environment;
+use crate::reactor;
 
 pub struct Hub {
     // config: Config,
     channels: RwLock<HashMap<String, Arc<dyn channel::Channel>>>,
+    reactors: RwLock<HashMap<String, Arc<dyn reactor::Reactor>>>,
     environment: Arc<environment::Environment>,
 }
 
@@ -16,6 +18,7 @@ pub fn new(config: Config) -> Arc<Hub> {
     // config: config,
     let hub = Arc::new(Hub {
         channels: RwLock::new(HashMap::new()),
+        reactors: RwLock::new(HashMap::new()),
         environment: environment::new(&config),
     });
 
@@ -28,6 +31,17 @@ pub fn new(config: Config) -> Arc<Hub> {
 
         let mut channels = hub.channels.write().unwrap();
         channels.insert(s.clone(), constructor(s, cfg, Arc::downgrade(&hub)));
+    }
+
+    for (name, cfg) in &config.reactors {
+        let constructor = match cfg.class {
+            reactor::Type::EchoReactor => reactor::echo::new,
+        };
+
+        let s = name.to_string();
+
+        let mut reactors = hub.reactors.write().unwrap();
+        reactors.insert(s.clone(), constructor(s, cfg, Arc::downgrade(&hub)));
     }
 
     hub
@@ -50,6 +64,11 @@ impl Hub {
         for mut event in rx {
             event.ensure_complete(&self.environment);
             debug!("[hub] got event: {:?}", event);
+            let mut handlers = vec![];
+            for (name, reactor) in self.reactors.read().unwrap().iter() {
+                handlers.append(&mut reactor.handlers_matching(&event));
+                debug!("{}", name);
+            }
         }
 
         for handle in handles {

@@ -7,6 +7,7 @@ use serde::Deserialize;
 use toml;
 
 use crate::channel;
+use crate::reactor;
 
 #[derive(Deserialize, Debug)]
 pub struct Config {
@@ -14,7 +15,7 @@ pub struct Config {
 
     // work me out later
     pub channels: HashMap<String, ComponentConfig<channel::Type>>,
-    pub reactors: HashMap<String, ComponentConfig<ReactorType>>,
+    pub reactors: HashMap<String, ComponentConfig<reactor::Type>>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -23,12 +24,6 @@ pub struct ComponentConfig<T> {
 
     #[serde(flatten)]
     pub extra: HashMap<String, toml::Value>,
-}
-
-// known reactors
-#[derive(Deserialize, Debug)]
-pub enum ReactorType {
-    EchoReactor,
 }
 
 pub fn new(filename: &str) -> Config {
