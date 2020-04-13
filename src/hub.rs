@@ -1,6 +1,5 @@
 use std::collections::HashMap;
-use std::rc::Rc;
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc, RwLock};
 
 use crate::channel;
 use crate::config::Config;
@@ -8,17 +7,17 @@ use crate::environment;
 
 pub struct Hub {
     // config: Config,
-    channels: HashMap<String, Box<dyn channel::Channel>>,
-    environment: Rc<environment::Environment>,
+    channels: RwLock<HashMap<String, Arc<dyn channel::Channel>>>,
+    environment: Arc<environment::Environment>,
 }
 
-pub fn new(config: Config) -> Hub {
+pub fn new(config: Config) -> Arc<Hub> {
     // let slack = channel::slack::foo();
     // config: config,
-    let mut hub = Hub {
-        channels: HashMap::new(),
+    let hub = Arc::new(Hub {
+        channels: RwLock::new(HashMap::new()),
         environment: environment::new(&config),
-    };
+    });
 
     for (name, cfg) in &config.channels {
         let constructor = match cfg.class {
@@ -27,10 +26,8 @@ pub fn new(config: Config) -> Hub {
 
         let s = name.to_string();
 
-        hub.channels.insert(
-            s.clone(),
-            constructor(s, cfg, Rc::downgrade(&hub.environment)),
-        );
+        let mut channels = hub.channels.write().unwrap();
+        channels.insert(s.clone(), constructor(s, cfg, Arc::downgrade(&hub)));
     }
 
     hub
@@ -43,14 +40,16 @@ impl Hub {
         let (tx, rx) = mpsc::channel();
 
         let mut handles = vec![];
-        for c in self.channels.values() {
+        for c in self.channels.read().unwrap().values() {
+            let channel = Arc::clone(&c);
             let event_channel = tx.clone();
-            let handle = c.start(event_channel);
+            let handle = channel.start(event_channel);
             handles.push(handle);
         }
 
-        for event in rx {
+        for mut event in rx {
             debug!("[hub] got event: {:?}", event);
+            event.ensure_complete(&self.environment);
         }
 
         for handle in handles {

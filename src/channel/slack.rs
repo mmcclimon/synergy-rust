@@ -1,16 +1,15 @@
 use std::cell::RefCell;
 use std::error::Error;
 use std::fmt;
-use std::rc::Weak;
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc, Weak};
 use std::thread;
 
 use reqwest::Url;
 use serde::Deserialize;
 
 use crate::channel::{Channel, ChannelConfig};
-use crate::environment::Environment;
 use crate::event::{Event, EventType};
+use crate::hub::Hub;
 
 type Websocket = tungstenite::protocol::WebSocket<tungstenite::client::AutoStream>;
 
@@ -19,7 +18,7 @@ pub struct Slack {
     api_token: String,
     our_name: RefCell<Option<String>>,
     our_id: RefCell<Option<String>>,
-    _env: RefCell<Weak<Environment>>,
+    // hub: RefCell<Weak<Hub>>,
 }
 
 // This is a raw message event, and only matches messages, because that's the
@@ -51,7 +50,7 @@ impl fmt::Display for SlackInternalError {
     }
 }
 
-pub fn new(name: String, cfg: &ChannelConfig, env: Weak<Environment>) -> Box<Slack> {
+pub fn new(name: String, cfg: &ChannelConfig, _hub: Weak<Hub>) -> Arc<Slack> {
     let api_token = &cfg.extra["api_token"]
         .as_str()
         .expect("no api token in config!");
@@ -61,10 +60,10 @@ pub fn new(name: String, cfg: &ChannelConfig, env: Weak<Environment>) -> Box<Sla
         api_token: api_token.to_string(),
         our_id: RefCell::new(None),
         our_name: RefCell::new(None),
-        _env: RefCell::new(env),
+        // hub: RefCell::new(hub),
     };
 
-    Box::new(channel)
+    Arc::new(channel)
 }
 
 impl Slack {

@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::{Rc, Weak};
+use std::sync::{Arc, Weak};
 
 use rusqlite::NO_PARAMS;
 
@@ -14,8 +14,8 @@ pub struct Directory {
 }
 
 impl Directory {
-    pub fn new() -> Rc<Directory> {
-        Rc::new(Directory {
+    pub fn new() -> Arc<Directory> {
+        Arc::new(Directory {
             env: RefCell::new(Weak::new()),
             users: RefCell::new(HashMap::new()),
         })

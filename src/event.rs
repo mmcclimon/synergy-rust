@@ -1,4 +1,5 @@
 // use crate::channel::Channel;
+use crate::environment::Environment;
 use crate::user::User;
 
 #[derive(Debug)]
@@ -22,4 +23,10 @@ pub struct Event {
     // stick a name in here, the hub can look them up by name such that they can
     // reply to it.
     pub from_channel_name: String,
+}
+
+impl Event {
+    pub fn ensure_complete(&mut self, env: &Environment) {
+        // fill in user here, maybe?
+    }
 }

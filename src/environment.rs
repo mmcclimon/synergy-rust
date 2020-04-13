@@ -1,5 +1,5 @@
 use std::fmt;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use rusqlite::{Connection, NO_PARAMS};
 
@@ -8,22 +8,23 @@ use crate::user_directory::Directory;
 
 pub struct Environment {
     pub db: Connection,
-    user_directory: Rc<Directory>,
+    user_directory: Arc<Directory>,
 }
 
-pub fn new(config: &Config) -> Rc<Environment> {
+pub fn new(config: &Config) -> Arc<Environment> {
     let conn = Connection::open(&config.state_dbfile).expect("Could not open dbfile!");
 
     // make the user directory first, with an empty env (internally). Once we
     // have constructed ourselves with a strong ref to the directory, we'll
     // give the directory a weak ref of ourself.
-    let env = Rc::new(Environment {
+    let env = Arc::new(Environment {
         db: conn,
         user_directory: Directory::new(),
     });
 
-    let ud = Rc::clone(&env.user_directory);
-    *ud.env.borrow_mut() = Rc::downgrade(&env);
+    // I am a little surprised this works.
+    let ud = Arc::clone(&env.user_directory);
+    *ud.env.borrow_mut() = Arc::downgrade(&env);
 
     env.maybe_create_state_tables();
     ud.load_users();
