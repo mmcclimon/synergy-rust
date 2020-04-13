@@ -8,7 +8,7 @@ use crate::user_directory::Directory;
 
 pub struct Environment {
     pub db: Connection,
-    user_directory: Arc<Directory>,
+    pub user_directory: Arc<Directory>,
 }
 
 pub fn new(config: &Config) -> Arc<Environment> {

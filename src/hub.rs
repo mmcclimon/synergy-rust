@@ -48,8 +48,8 @@ impl Hub {
         }
 
         for mut event in rx {
-            debug!("[hub] got event: {:?}", event);
             event.ensure_complete(&self.environment);
+            debug!("[hub] got event: {:?}", event);
         }
 
         for handle in handles {
