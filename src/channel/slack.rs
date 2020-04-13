@@ -108,6 +108,34 @@ impl Slack {
     }
 }
 
+impl Channel for Slack {
+    fn name(&self) -> String {
+        self.name.clone()
+    }
+
+    fn start(&self, events_channel: mpsc::Sender<Event>) -> thread::JoinHandle<()> {
+        info!("starting slack channel {}", self.name);
+
+        let mut ws = self.get_websocket().expect("Error connecting to slack!");
+
+        let name = self.name.clone();
+
+        let handle = std::thread::spawn(move || loop {
+            let raw_event = match process_ws_message(ws.read_message()) {
+                Some(raw) => raw,
+                None => continue,
+            };
+
+            let event = event_from_raw(raw_event, &name);
+            events_channel.send(event).unwrap();
+        });
+
+        handle
+    }
+}
+
+// private things, used internally
+
 fn process_ws_message(raw: Result<tungstenite::Message, tungstenite::Error>) -> Option<RawEvent> {
     let message = match raw {
         Ok(m) => m,
@@ -139,41 +167,16 @@ fn process_ws_message(raw: Result<tungstenite::Message, tungstenite::Error>) -> 
     return Some(event);
 }
 
-impl Channel for Slack {
-    fn name(&self) -> String {
-        self.name.clone()
-    }
-
-    fn start(&self, events_channel: mpsc::Sender<Event>) -> thread::JoinHandle<()> {
-        info!("starting slack channel {}", self.name);
-
-        let mut ws = self.get_websocket().expect("Error connecting to slack!");
-
-        let name = self.name.clone();
-
-        let handle = std::thread::spawn(move || {
-            loop {
-                let raw_event = match process_ws_message(ws.read_message()) {
-                    Some(raw) => raw,
-                    None => continue,
-                };
-
-                let e = Event {
-                    kind: EventType::Message,
-                    // TODO: fill these in properly
-                    from_user: None,
-                    text: raw_event.text,
-                    is_public: false,
-                    was_targeted: true,
-                    from_address: raw_event.user,
-                    conversation_address: raw_event.channel,
-                    from_channel_name: name.clone(),
-                };
-
-                events_channel.send(e).unwrap();
-            }
-        });
-
-        handle
+fn event_from_raw(raw: RawEvent, channel_name: &String) -> Event {
+    Event {
+        kind: EventType::Message,
+        // TODO: fill these in properly
+        from_user: None,
+        text: raw.text,
+        is_public: false,
+        was_targeted: true,
+        from_address: raw.user,
+        conversation_address: raw.channel,
+        from_channel_name: channel_name.clone(),
     }
 }
