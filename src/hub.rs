@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::sync::mpsc::channel;
+use std::sync::mpsc;
 
 use crate::channel;
 use crate::config::Config;
@@ -27,7 +27,10 @@ pub fn new(config: Config) -> Hub {
 
         let s = name.to_string();
 
-        hub.channels.insert(s.clone(), constructor(s, cfg));
+        hub.channels.insert(
+            s.clone(),
+            constructor(s, cfg, Rc::downgrade(&hub.environment)),
+        );
     }
 
     hub
@@ -37,7 +40,7 @@ impl Hub {
     pub fn run(&self) {
         info!("here we go!");
 
-        let (tx, rx) = channel();
+        let (tx, rx) = mpsc::channel();
 
         let mut handles = vec![];
         for (_, c) in &self.channels {
@@ -47,7 +50,7 @@ impl Hub {
         }
 
         for event in rx {
-            debug!("got event: {:?}", event);
+            debug!("[hub] got event: {:?}", event);
         }
 
         for handle in handles {
