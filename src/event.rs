@@ -50,4 +50,8 @@ impl Event {
             self.from_user = Some(u.clone());
         }
     }
+
+    pub fn reply(&self, text: &str) {
+        info!("TODO: work out replies");
+    }
 }

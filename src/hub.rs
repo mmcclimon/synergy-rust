@@ -64,10 +64,15 @@ impl Hub {
         for mut event in rx {
             event.ensure_complete(&self.environment);
             debug!("[hub] got event: {:?}", event);
-            let mut handlers = vec![];
-            for (name, reactor) in self.reactors.read().unwrap().iter() {
-                handlers.append(&mut reactor.handlers_matching(&event));
-                debug!("{}", name);
+
+            // So, in perl, we collect all the handlers up front, check for
+            // conflicts between those marked exclusive, then run them. I think
+            // probably we *could* do that here, but I have been fighting with
+            // the borrow checker for a good long while now trying to get the
+            // lifetimes to work out correctly (because the handlers need access
+            // to &self, and I can't work out how to tell them that).
+            for reactor in self.reactors.read().unwrap().values() {
+                reactor.react_to(&event);
             }
         }
 
