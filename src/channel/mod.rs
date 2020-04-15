@@ -14,7 +14,7 @@ pub enum Type {
     SlackChannel,
 }
 
-type ChannelConfig = config::ComponentConfig<Type>;
+pub type ChannelConfig = config::ComponentConfig<Type>;
 
 pub trait Channel {
     fn start(&self, tx: mpsc::Sender<event::Event>) -> thread::JoinHandle<()>;

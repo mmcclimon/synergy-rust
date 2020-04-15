@@ -7,8 +7,7 @@ use std::thread;
 use reqwest::Url;
 use serde::Deserialize;
 
-use crate::channel::ChannelConfig;
-use crate::hub::Seed;
+use crate::hub::ChannelSeed;
 use crate::message::{ChannelEvent, ChannelMessage};
 
 type Websocket = tungstenite::protocol::WebSocket<tungstenite::client::AutoStream>;
@@ -51,7 +50,7 @@ impl fmt::Display for SlackInternalError {
     }
 }
 
-pub fn new(seed: &Seed<ChannelConfig>) -> Slack {
+pub fn new(seed: &ChannelSeed) -> Slack {
     let api_token = &seed.config.extra["api_token"]
         .as_str()
         .expect("no api token in config!");
@@ -65,7 +64,7 @@ pub fn new(seed: &Seed<ChannelConfig>) -> Slack {
     }
 }
 
-pub fn start(mut seed: Seed<ChannelConfig>) -> (String, thread::JoinHandle<()>) {
+pub fn start(seed: ChannelSeed) -> (String, thread::JoinHandle<()>) {
     let name = seed.name.clone();
 
     let handle = thread::spawn(move || {

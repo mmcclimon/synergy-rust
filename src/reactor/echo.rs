@@ -1,35 +1,50 @@
-use std::sync::{Arc, Weak};
+use std::sync::{mpsc, Arc};
+use std::thread;
 
-use crate::event::Event;
-use crate::hub::Hub;
-use crate::reactor::{Handler, Reactor, ReactorConfig};
+use crate::hub::ReactorSeed;
+use crate::message::{ReactorEvent, ReactorMessage};
 
 pub struct Echo {
-    name: String,
+    _name: String,
 }
 
-pub fn new(name: String, _cfg: &ReactorConfig, _hub: Weak<Hub>) -> Arc<Echo> {
-    Arc::new(Echo { name })
+pub fn new(seed: &ReactorSeed) -> Echo {
+    Echo {
+        _name: seed.name.clone(),
+    }
+}
+
+pub fn start(seed: ReactorSeed) -> (String, thread::JoinHandle<()>) {
+    let name = seed.name.clone();
+
+    let handle = thread::spawn(move || {
+        let channel = self::new(&seed);
+        channel.start(seed.event_handle);
+    });
+
+    (name, handle)
 }
 
 impl Echo {
-    pub fn handle_echo(&self, event: &Event) {
+    fn start(&self, events_channel: mpsc::Receiver<Arc<ReactorEvent>>) {
+        use std::borrow::Borrow;
+
+        for reactor_event in events_channel {
+            match reactor_event.borrow() {
+                ReactorEvent::Message(event) => {
+                    self.handle_echo(&event);
+                }
+            };
+        }
+    }
+
+    pub fn handle_echo(&self, event: &ReactorMessage) {
         debug!(
             "got event from {}: {}",
-            event.from_user.as_ref().unwrap().username,
+            event.user.as_ref().unwrap().username,
             event.text
         );
 
-        event.reply(&event.text);
-    }
-}
-
-impl Reactor for Echo {
-    fn name(&self) -> String {
-        self.name.clone()
-    }
-
-    fn react_to(&self, event: &Event) {
-        self.handle_echo(event);
+        // event.reply(&event.text);
     }
 }

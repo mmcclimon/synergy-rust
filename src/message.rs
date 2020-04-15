@@ -1,4 +1,4 @@
-use crate::user::User;
+use crate::user::MinimalUser;
 
 #[derive(Debug)]
 pub enum ChannelEvent {
@@ -28,5 +28,5 @@ pub struct ReactorMessage {
     pub from_address: String,
     pub conversation_address: String,
     pub origin: String,
-    pub user: Option<User>,
+    pub user: Option<MinimalUser>,
 }

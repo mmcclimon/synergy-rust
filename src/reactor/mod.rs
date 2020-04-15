@@ -17,7 +17,7 @@ pub struct Handler {
     pub handler: Box<dyn Fn() -> ()>,
 }
 
-type ReactorConfig = ComponentConfig<Type>;
+pub type ReactorConfig = ComponentConfig<Type>;
 
 pub trait Reactor {
     fn name(&self) -> String;
