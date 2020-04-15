@@ -8,11 +8,11 @@ use reqwest::Url;
 use serde::Deserialize;
 
 use crate::channel::ChannelConfig;
-use crate::event::{Event, EventType};
 use crate::hub::Seed;
-use crate::message::ChannelEvent;
+use crate::message::{ChannelEvent, ChannelMessage};
 
 type Websocket = tungstenite::protocol::WebSocket<tungstenite::client::AutoStream>;
+type TungsteniteResult = Result<tungstenite::Message, tungstenite::Error>;
 
 pub struct Slack {
     pub name: String,
@@ -65,8 +65,8 @@ pub fn new(seed: &Seed<ChannelConfig>) -> Slack {
     }
 }
 
-pub fn start(seed: Seed<ChannelConfig>) -> (String, thread::JoinHandle<()>) {
-    let name = format!("channel/{}", seed.name);
+pub fn start(mut seed: Seed<ChannelConfig>) -> (String, thread::JoinHandle<()>) {
+    let name = seed.name.clone();
 
     let handle = thread::spawn(move || {
         let channel = self::new(&seed);
@@ -77,6 +77,25 @@ pub fn start(seed: Seed<ChannelConfig>) -> (String, thread::JoinHandle<()>) {
 }
 
 impl Slack {
+    fn start(&self, events_channel: mpsc::Sender<ChannelEvent>) -> ! {
+        info!("starting slack channel {}", self.name);
+
+        let mut ws = self.get_websocket().expect("Error connecting to slack!");
+
+        // TODO here, we also need a channel to send events
+
+        loop {
+            let raw_event = match self.process_ws_message(ws.read_message()) {
+                Some(raw) => raw,
+                None => continue,
+            };
+
+            let msg = self.message_from_raw(raw_event);
+
+            events_channel.send(msg).unwrap();
+        }
+    }
+
     fn get_websocket(&self) -> Result<Websocket, Box<dyn Error>> {
         // using blocking here because I think I'm going to do the concurrent
         // stuff a different way.
@@ -117,72 +136,46 @@ impl Slack {
         Ok(websocket)
     }
 
-    fn start(&self, events_channel: mpsc::Sender<ChannelEvent>) -> thread::JoinHandle<()> {
-        info!("starting slack channel {}", self.name);
+    fn process_ws_message(&self, raw: TungsteniteResult) -> Option<RawEvent> {
+        let message = match raw {
+            Ok(m) => m,
+            Err(e) => {
+                info!("error reading from websocket: {:?}", e);
+                return None;
+            }
+        };
 
-        let mut ws = self.get_websocket().expect("Error connecting to slack!");
+        let frame = match message {
+            tungstenite::Message::Text(ref s) => s,
+            tungstenite::Message::Close(_) => {
+                info!("got close message; figure out what to do here");
+                return None;
+            }
+            // ignore everything else (ping/pong/binary)
+            _ => return None,
+        };
 
-        let name = self.name.clone();
+        let event: RawEvent = match serde_json::from_str(frame) {
+            Ok(re) => re,
+            Err(e) => {
+                trace!("error derializing frame {}: {}", frame, e);
+                return None;
+            }
+        };
 
-        let handle = std::thread::spawn(move || loop {
-            let raw_event = match process_ws_message(ws.read_message()) {
-                Some(raw) => raw,
-                None => continue,
-            };
-
-            // FIXME
-            let event = event_from_raw(raw_event, &name);
-
-            events_channel.send(ChannelEvent::Message(event)).unwrap();
-        });
-
-        handle
+        // debug!("got event {:?}", event);
+        return Some(event);
     }
-}
 
-// private things, used internally
-
-fn process_ws_message(raw: Result<tungstenite::Message, tungstenite::Error>) -> Option<RawEvent> {
-    let message = match raw {
-        Ok(m) => m,
-        Err(e) => {
-            info!("error reading from websocket: {:?}", e);
-            return None;
-        }
-    };
-
-    let frame = match message {
-        tungstenite::Message::Text(ref s) => s,
-        tungstenite::Message::Close(_) => {
-            info!("got close message; figure out what to do here");
-            return None;
-        }
-        // ignore everything else (ping/pong/binary)
-        _ => return None,
-    };
-
-    let event: RawEvent = match serde_json::from_str(frame) {
-        Ok(re) => re,
-        Err(e) => {
-            trace!("error derializing frame {}: {}", frame, e);
-            return None;
-        }
-    };
-
-    // debug!("got event {:?}", event);
-    return Some(event);
-}
-
-fn event_from_raw(raw: RawEvent, channel_name: &String) -> Event {
-    Event {
-        kind: EventType::Message,
-        // TODO: fill these in properly
-        from_user: None,
-        text: raw.text,
-        is_public: false,
-        was_targeted: true,
-        from_address: raw.user,
-        conversation_address: raw.channel,
-        from_channel_name: channel_name.clone(),
+    fn message_from_raw(&self, raw: RawEvent) -> ChannelEvent {
+        ChannelEvent::Message(ChannelMessage {
+            // TODO: fill these in properly
+            text: raw.text,
+            is_public: false,
+            was_targeted: true,
+            from_address: raw.user,
+            conversation_address: raw.channel,
+            origin: self.name.clone(),
+        })
     }
 }

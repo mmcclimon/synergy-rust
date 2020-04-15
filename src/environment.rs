@@ -4,6 +4,8 @@ use std::sync::Arc;
 use rusqlite::{Connection, NO_PARAMS};
 
 use crate::config::Config;
+use crate::message::ChannelMessage;
+use crate::user::User;
 use crate::user_directory::Directory;
 
 pub struct Environment {
@@ -43,6 +45,10 @@ impl fmt::Debug for Environment {
 }
 
 impl Environment {
+    pub fn resolve_user(&self, event: &ChannelMessage) -> Option<User> {
+        self.user_directory.resolve_user(&event)
+    }
+
     fn maybe_create_state_tables(&self) {
         self.db
             .execute(

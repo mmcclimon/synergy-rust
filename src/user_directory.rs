@@ -5,6 +5,7 @@ use std::sync::{Arc, Weak};
 use rusqlite::NO_PARAMS;
 
 use crate::environment::Environment;
+use crate::message::ChannelMessage;
 use crate::user::User;
 
 #[derive(Debug)]
@@ -65,6 +66,28 @@ impl Directory {
             let users = self.users.borrow_mut();
             let user = users.get(&who).unwrap();
             user.add_identity(name, val);
+        }
+    }
+
+    pub fn resolve_user(&self, event: &ChannelMessage) -> Option<User> {
+        let users = self.users.borrow();
+        let user = users
+            .values()
+            .filter(|u| {
+                u.identities
+                    .borrow()
+                    .iter()
+                    .filter(|(name, val)| event.from_address == **val && event.origin == **name)
+                    .next()
+                    .is_some()
+            })
+            .next();
+
+        match user {
+            // cloning is gross here, but I don't want to futz with references
+            // and lifetimes at the moment
+            Some(u) => Some(u.clone()),
+            None => None,
         }
     }
 }
