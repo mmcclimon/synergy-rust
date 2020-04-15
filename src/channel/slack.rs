@@ -1,15 +1,16 @@
 use std::cell::RefCell;
 use std::error::Error;
 use std::fmt;
-use std::sync::{mpsc, Arc, Weak};
+use std::sync::mpsc;
 use std::thread;
 
 use reqwest::Url;
 use serde::Deserialize;
 
-use crate::channel::{Channel, ChannelConfig};
+use crate::channel::ChannelConfig;
 use crate::event::{Event, EventType};
-use crate::hub::Hub;
+use crate::hub::Seed;
+use crate::message::ChannelEvent;
 
 type Websocket = tungstenite::protocol::WebSocket<tungstenite::client::AutoStream>;
 
@@ -50,20 +51,29 @@ impl fmt::Display for SlackInternalError {
     }
 }
 
-pub fn new(name: String, cfg: &ChannelConfig, _hub: Weak<Hub>) -> Arc<Slack> {
-    let api_token = &cfg.extra["api_token"]
+pub fn new(seed: &Seed<ChannelConfig>) -> Slack {
+    let api_token = &seed.config.extra["api_token"]
         .as_str()
         .expect("no api token in config!");
 
-    let channel = Slack {
-        name,
+    Slack {
+        name: seed.name.clone(),
         api_token: api_token.to_string(),
         our_id: RefCell::new(None),
         our_name: RefCell::new(None),
         // hub: RefCell::new(hub),
-    };
+    }
+}
 
-    Arc::new(channel)
+pub fn start(seed: Seed<ChannelConfig>) -> (String, thread::JoinHandle<()>) {
+    let name = format!("channel/{}", seed.name);
+
+    let handle = thread::spawn(move || {
+        let channel = self::new(&seed);
+        channel.start(seed.event_handle);
+    });
+
+    (name, handle)
 }
 
 impl Slack {
@@ -106,14 +116,8 @@ impl Slack {
 
         Ok(websocket)
     }
-}
 
-impl Channel for Slack {
-    fn name(&self) -> String {
-        self.name.clone()
-    }
-
-    fn start(&self, events_channel: mpsc::Sender<Event>) -> thread::JoinHandle<()> {
+    fn start(&self, events_channel: mpsc::Sender<ChannelEvent>) -> thread::JoinHandle<()> {
         info!("starting slack channel {}", self.name);
 
         let mut ws = self.get_websocket().expect("Error connecting to slack!");
@@ -126,8 +130,10 @@ impl Channel for Slack {
                 None => continue,
             };
 
+            // FIXME
             let event = event_from_raw(raw_event, &name);
-            events_channel.send(event).unwrap();
+
+            events_channel.send(ChannelEvent::Message(event)).unwrap();
         });
 
         handle

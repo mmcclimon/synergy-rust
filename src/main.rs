@@ -8,6 +8,7 @@ mod environment;
 mod event;
 mod hub;
 mod logger;
+mod message;
 mod reactor;
 mod user;
 mod user_directory;
@@ -40,12 +41,12 @@ fn main() {
     }
 
     let config = config::new("config.toml");
-    let hub = hub::new(config);
+    let hub = hub::new();
 
     if matches.opt_present("no-connect") {
         info!("exiting early because --no-connect was passed");
         return;
     }
 
-    hub.run();
+    hub.run(config);
 }

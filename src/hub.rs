@@ -2,80 +2,57 @@ use std::collections::HashMap;
 use std::sync::{mpsc, Arc, RwLock};
 
 use crate::channel;
-use crate::config::Config;
+use crate::config::{ComponentConfig, Config};
 use crate::environment;
+use crate::message::ChannelEvent;
 use crate::reactor;
 
 pub struct Hub {
-    // config: Config,
-    channels: RwLock<HashMap<String, Arc<dyn channel::Channel>>>,
-    reactors: RwLock<HashMap<String, Arc<dyn reactor::Reactor>>>,
-    environment: Arc<environment::Environment>,
+    // Almost certainly I want _something_ here, but not right now.
 }
 
-pub fn new(config: Config) -> Arc<Hub> {
-    // let slack = channel::slack::foo();
-    // config: config,
-    let hub = Arc::new(Hub {
-        channels: RwLock::new(HashMap::new()),
-        reactors: RwLock::new(HashMap::new()),
-        environment: environment::new(&config),
-    });
+pub fn new() -> Hub {
+    Hub {}
+}
 
-    for (name, cfg) in &config.channels {
-        let constructor = match cfg.class {
-            channel::Type::SlackChannel => channel::slack::new,
-        };
-
-        let s = name.to_string();
-
-        let mut channels = hub.channels.write().unwrap();
-        channels.insert(s.clone(), constructor(s, cfg, Arc::downgrade(&hub)));
-    }
-
-    for (name, cfg) in &config.reactors {
-        let constructor = match cfg.class {
-            reactor::Type::EchoReactor => reactor::echo::new,
-        };
-
-        let s = name.to_string();
-
-        let mut reactors = hub.reactors.write().unwrap();
-        reactors.insert(s.clone(), constructor(s, cfg, Arc::downgrade(&hub)));
-    }
-
-    hub
+pub struct Seed<T> {
+    pub name: String,
+    pub config: T,
+    pub event_handle: mpsc::Sender<ChannelEvent>,
 }
 
 impl Hub {
-    pub fn run(&self) {
-        info!("here we go!");
-
-        let (tx, rx) = mpsc::channel();
+    pub fn run(&self, config: Config) {
+        info!("assembling hub");
 
         let mut handles = vec![];
-        for c in self.channels.read().unwrap().values() {
-            let channel = Arc::clone(&c);
-            let event_channel = tx.clone();
-            let handle = channel.start(event_channel);
+
+        let (channel_tx, channel_rx) = mpsc::channel();
+
+        for (name, cfg) in config.channels {
+            let starter = match cfg.class {
+                channel::Type::SlackChannel => channel::slack::start,
+            };
+
+            let seed = Seed {
+                name,
+                config: cfg,
+                event_handle: channel_tx.clone(),
+            };
+
+            let (addr, handle) = starter(seed);
             handles.push(handle);
+            debug!("set up {}", addr);
         }
 
-        for mut event in rx {
-            event.ensure_complete(&self.environment);
-            debug!("[hub] got event: {:?}", event);
+        for message in channel_rx {
+            // event.ensure_complete(&self.environment);
+            debug!("[hub] got event: {:?}", message);
 
-            // So, in perl, we collect all the handlers up front, check for
-            // conflicts between those marked exclusive, then run them. I think
-            // probably we *could* do that here, but I have been fighting with
-            // the borrow checker for a good long while now trying to get the
-            // lifetimes to work out correctly (because the handlers need access
-            // to &self, and I can't work out how to tell them that).
-            for reactor in self.reactors.read().unwrap().values() {
-                reactor.react_to(&event);
-            }
+            // assemble message, send into reactors
         }
 
+        // loop forever
         for handle in handles {
             handle.join().unwrap();
         }
