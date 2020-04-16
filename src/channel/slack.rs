@@ -5,10 +5,10 @@ use std::sync::mpsc;
 use std::thread;
 
 use reqwest::Url;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::hub::ChannelSeed;
-use crate::message::{ChannelEvent, ChannelMessage};
+use crate::message::{ChannelEvent, ChannelMessage, ChannelReply};
 
 type Websocket = tungstenite::protocol::WebSocket<tungstenite::client::AutoStream>;
 type TungsteniteResult = Result<tungstenite::Message, tungstenite::Error>;
@@ -18,7 +18,8 @@ pub struct Slack {
     api_token: String,
     our_name: RefCell<Option<String>>,
     our_id: RefCell<Option<String>>,
-    // hub: RefCell<Weak<Hub>>,
+    event_tx: mpsc::Sender<ChannelEvent>,
+    reply_rx: mpsc::Receiver<ChannelReply>,
 }
 
 // This is a raw message event, and only matches messages, because that's the
@@ -37,6 +38,14 @@ struct RawEvent {
     bot_id: Option<String>,
 }
 
+#[derive(Serialize, Debug)]
+struct OutgoingMessage {
+    #[serde(rename = "type")]
+    kind: String,
+    channel: String,
+    text: String,
+}
+
 // XXX clean me up
 
 #[derive(Debug)]
@@ -50,7 +59,7 @@ impl fmt::Display for SlackInternalError {
     }
 }
 
-pub fn new(seed: &ChannelSeed) -> Slack {
+pub fn new(seed: ChannelSeed) -> Slack {
     let api_token = &seed.config.extra["api_token"]
         .as_str()
         .expect("no api token in config!");
@@ -60,7 +69,8 @@ pub fn new(seed: &ChannelSeed) -> Slack {
         api_token: api_token.to_string(),
         our_id: RefCell::new(None),
         our_name: RefCell::new(None),
-        // hub: RefCell::new(hub),
+        event_tx: seed.event_handle,
+        reply_rx: seed.reply_handle,
     }
 }
 
@@ -68,22 +78,42 @@ pub fn start(seed: ChannelSeed) -> (String, thread::JoinHandle<()>) {
     let name = seed.name.clone();
 
     let handle = thread::spawn(move || {
-        let channel = self::new(&seed);
-        channel.start(seed.event_handle);
+        let channel = self::new(seed);
+        channel.start();
     });
 
     (name, handle)
 }
 
 impl Slack {
-    fn start(&self, events_channel: mpsc::Sender<ChannelEvent>) -> ! {
-        info!("starting slack channel {}", self.name);
-
+    fn start(&self) -> ! {
         let mut ws = self.get_websocket().expect("Error connecting to slack!");
 
         // TODO here, we also need a channel to send events
 
         loop {
+            loop {
+                match self.reply_rx.try_recv() {
+                    Ok(ChannelReply::Message(reply)) => {
+                        let to_send = OutgoingMessage {
+                            kind: "message".to_string(),
+                            text: reply.text,
+                            channel: reply.conversation_address,
+                        };
+
+                        debug!("sending message: {:?}", to_send);
+
+                        let text = serde_json::to_string(&to_send).unwrap();
+                        ws.write_message(tungstenite::Message::Text(text)).unwrap();
+                    }
+                    Err(mpsc::TryRecvError::Empty) => break,
+                    Err(mpsc::TryRecvError::Disconnected) => {
+                        panic!("hub hung up on us?");
+                    }
+                }
+            }
+
+            // XXX this is blocking, and I don't want it to be.
             let raw_event = match self.process_ws_message(ws.read_message()) {
                 Some(raw) => raw,
                 None => continue,
@@ -91,7 +121,7 @@ impl Slack {
 
             let msg = self.message_from_raw(raw_event);
 
-            events_channel.send(msg).unwrap();
+            self.event_tx.send(msg).unwrap();
         }
     }
 

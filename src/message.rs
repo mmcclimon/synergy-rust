@@ -46,7 +46,7 @@ pub struct ReactorMessage {
 // I think eventually, I want some sort of unique identifier per [channel]event,
 // and then set reply_to here, so that we can keep track of things that don't
 // get replies (maybe).
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Reply {
     pub text: String,
     pub from_address: String,
@@ -64,5 +64,13 @@ impl ReactorMessage {
             origin: origin.to_string(),
             destination: self.origin.clone(),
         })
+    }
+}
+
+impl From<ReactorReply> for ChannelReply {
+    fn from(r: ReactorReply) -> Self {
+        match r {
+            ReactorReply::Message(reply) => ChannelReply::Message(reply.clone()),
+        }
     }
 }

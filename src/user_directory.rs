@@ -89,7 +89,6 @@ impl Directory {
     }
 
     pub fn resolve_user(&self, event: &ChannelMessage) -> Option<User> {
-        debug!("resolving user for {:?}", event);
         let idents = self.identities.borrow();
 
         let channel_identities = match idents.get(&event.origin) {

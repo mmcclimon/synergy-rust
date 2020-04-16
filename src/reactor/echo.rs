@@ -47,12 +47,13 @@ impl Echo {
     }
 
     pub fn handle_echo(&self, event: &ReactorMessage) {
-        debug!(
-            "got event from {}: {}",
-            event.user.as_ref().unwrap().username,
-            event.text
-        );
+        let who = match &event.user {
+            Some(u) => &u.username,
+            None => "someone",
+        };
 
-        self.send(event.reply(&event.text, &self.name));
+        let text = format!("I heard {} say {}", who, event.text);
+
+        self.send(event.reply(&text, &self.name));
     }
 }

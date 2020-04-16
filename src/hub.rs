@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::{mpsc, Arc};
 use std::time::Duration;
 
@@ -38,7 +39,7 @@ impl Hub {
 
         let mut handles = vec![];
         let mut reactor_senders = vec![];
-        let mut channel_senders = vec![];
+        let mut channel_senders = HashMap::new();
 
         let (event_tx, event_rx) = mpsc::channel();
         let (reply_tx, reply_rx) = mpsc::channel();
@@ -54,7 +55,7 @@ impl Hub {
             // we have to send a receiver into the channel, and keep track of
             // our senders
             let (channel_tx, channel_rx) = mpsc::channel();
-            channel_senders.push(channel_tx);
+            channel_senders.insert(name.clone(), channel_tx);
 
             let seed = ChannelSeed {
                 name,
@@ -93,10 +94,11 @@ impl Hub {
             // write, then block on read.
             loop {
                 match reply_rx.try_recv() {
-                    Ok(message) => {
-                        debug!("got reply, must handle: {:?}", message);
-
-                        // look up its destination, pass it along.
+                    Ok(ReactorReply::Message(reply)) => {
+                        // figure out the destination, then send it along
+                        // debug!("sending reply into channel");
+                        let tx = channel_senders.get(&reply.destination).unwrap();
+                        tx.send(ChannelReply::Message(reply)).unwrap();
                     }
                     Err(mpsc::TryRecvError::Empty) => break,
                     Err(mpsc::TryRecvError::Disconnected) => {
@@ -106,10 +108,11 @@ impl Hub {
             }
 
             // duration chosen by fair dice roll.
-            match event_rx.recv_timeout(Duration::from_millis(200)) {
+            match event_rx.recv_timeout(Duration::from_millis(50)) {
                 Ok(message) => {
                     let reactor_event = Arc::new(self.transmogrify_event(message, &env));
-                    debug!("[hub] transmogged event: {:?}", reactor_event);
+
+                    // debug!("sending event into reactors");
 
                     // pass it along into reactors
                     for tx in &reactor_senders {
