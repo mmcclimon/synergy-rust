@@ -11,12 +11,6 @@ pub enum Type {
     EchoReactor,
 }
 
-pub struct Handler {
-    pub name: String,
-    pub matcher: Box<dyn Fn(&Event) -> bool>,
-    pub handler: Box<dyn Fn() -> ()>,
-}
-
 pub type ReactorConfig = ComponentConfig<Type>;
 
 pub trait Reactor {

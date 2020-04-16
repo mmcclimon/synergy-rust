@@ -1,10 +1,10 @@
 // use crate::channel::Channel;
-use crate::environment::Environment;
+// use crate::environment::Environment;
 use crate::user::User;
 
 #[derive(Debug)]
 pub enum EventType {
-    Message,
+    // Message,
 }
 
 #[derive(Debug)]
@@ -25,8 +25,4 @@ pub struct Event {
     pub from_channel_name: String,
 }
 
-impl Event {
-    pub fn reply(&self, text: &str) {
-        info!("TODO: work out replies");
-    }
-}
+impl Event {}
