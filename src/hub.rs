@@ -7,7 +7,6 @@ use crate::environment;
 use crate::environment::Environment;
 use crate::message::*; // {ChannelEvent, ReactorEvent};
 use crate::reactor::{self, ReactorConfig};
-use crate::user::MinimalUser;
 
 pub struct Hub {
     // Almost certainly I want _something_ here, but not right now.
@@ -44,10 +43,13 @@ impl Hub {
         let (event_tx, event_rx) = mpsc::channel();
         let (reply_tx, reply_rx) = mpsc::channel();
 
-        for (name, cfg) in config.channels {
+        for (raw_name, cfg) in config.channels {
             let starter = match cfg.class {
                 channel::Type::SlackChannel => channel::slack::start,
             };
+
+            let name = format!("channel/{}", raw_name);
+            info!("starting {}", name);
 
             // we have to send a receiver into the channel, and keep track of
             // our senders
@@ -61,17 +63,18 @@ impl Hub {
                 reply_handle: channel_rx,
             };
 
-            let (addr, handle) = starter(seed);
+            let (_addr, handle) = starter(seed);
             handles.push(handle);
-            debug!("set up {}", addr);
         }
 
-        for (name, cfg) in config.reactors {
+        for (raw_name, cfg) in config.reactors {
             let starter = match cfg.class {
                 reactor::Type::EchoReactor => reactor::echo::start,
             };
 
-            // eent
+            let name = format!("reactor/{}", raw_name);
+            info!("starting {}", name);
+
             let (reactor_tx, reactor_rx) = mpsc::channel();
             reactor_senders.push(reactor_tx);
 
@@ -82,9 +85,8 @@ impl Hub {
                 reply_handle: reply_tx.clone(),
             };
 
-            let (addr, handle) = starter(seed);
+            let (_addr, handle) = starter(seed);
             handles.push(handle);
-            debug!("set up {}", addr);
         }
 
         loop {
@@ -127,10 +129,7 @@ impl Hub {
     fn transmogrify_event(&self, channel_event: ChannelEvent, env: &Environment) -> ReactorEvent {
         let msg = match channel_event {
             ChannelEvent::Message(event) => {
-                let user = match env.resolve_user(&event) {
-                    Some(u) => Some(MinimalUser::from(&u)),
-                    None => None,
-                };
+                let user = env.resolve_user(&event);
 
                 ReactorMessage {
                     text: event.text,

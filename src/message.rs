@@ -1,4 +1,4 @@
-use crate::user::MinimalUser;
+use crate::user::User;
 
 // FIXME all these names are terrible.
 
@@ -40,7 +40,7 @@ pub struct ReactorMessage {
     pub from_address: String,
     pub conversation_address: String,
     pub origin: String,
-    pub user: Option<MinimalUser>,
+    pub user: Option<User>,
 }
 
 // I think eventually, I want some sort of unique identifier per [channel]event,
