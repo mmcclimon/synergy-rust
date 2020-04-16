@@ -1,6 +1,3 @@
-use std::cell::RefCell;
-use std::collections::HashMap;
-
 #[derive(Debug, Clone)]
 pub struct User {
     pub username: String,
@@ -8,13 +5,6 @@ pub struct User {
     pub is_master: bool,
     pub is_virtual: bool,
     pub is_deleted: bool,
-    pub identities: RefCell<HashMap<String, String>>,
-}
-
-impl User {
-    pub fn add_identity(&self, name: String, value: String) {
-        self.identities.borrow_mut().insert(name, value);
-    }
 }
 
 // This is so that the code in the user directory is a little nicer. It assumes
@@ -50,7 +40,6 @@ impl From<&rusqlite::Row<'_>> for User {
             is_master,
             is_virtual,
             is_deleted,
-            identities: RefCell::new(HashMap::new()),
         }
     }
 }

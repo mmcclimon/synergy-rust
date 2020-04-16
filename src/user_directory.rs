@@ -5,19 +5,28 @@ use std::sync::{Arc, Weak};
 use rusqlite::NO_PARAMS;
 
 use crate::environment::Environment;
+use crate::message::ChannelMessage;
 use crate::user::User;
 
 #[derive(Debug)]
 pub struct Directory {
     pub env: RefCell<Weak<Environment>>,
     pub users: RefCell<HashMap<String, User>>,
+    identities: RefCell<HashMap<String, HashMap<String, String>>>,
 }
+
+// identities: {
+//   channel/name: {
+//      "addr": "username"
+//   }
+// }
 
 impl Directory {
     pub fn new() -> Arc<Directory> {
         Arc::new(Directory {
             env: RefCell::new(Weak::new()),
             users: RefCell::new(HashMap::new()),
+            identities: RefCell::new(HashMap::new()),
         })
     }
 
@@ -60,11 +69,37 @@ impl Directory {
             Ok((username, name, val))
         });
 
+        let mut identities = self.identities.borrow_mut();
+
         for identity in identities_iter.unwrap() {
-            let (who, name, val) = identity.unwrap();
-            let users = self.users.borrow_mut();
-            let user = users.get(&who).unwrap();
-            user.add_identity(name, val);
+            let (who, channel_name, addr) = identity.unwrap();
+
+            let munged_name = format!("channel/{}", channel_name);
+
+            let for_channel = if identities.contains_key(&munged_name) {
+                identities.get_mut(&munged_name).unwrap()
+            } else {
+                let key = munged_name.clone();
+                identities.insert(munged_name, HashMap::new());
+                identities.get_mut(&key).unwrap()
+            };
+
+            for_channel.insert(addr, who);
+        }
+    }
+
+    pub fn resolve_user(&self, event: &ChannelMessage) -> Option<User> {
+        let idents = self.identities.borrow();
+
+        let channel_identities = match idents.get(&event.origin) {
+            Some(i) => i,
+            None => return None,
+        };
+
+        let username = channel_identities.get(&event.from_address);
+        match username {
+            Some(name) => Some(self.users.borrow().get(name).unwrap().clone()),
+            None => None,
         }
     }
 }

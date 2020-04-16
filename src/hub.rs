@@ -1,83 +1,151 @@
 use std::collections::HashMap;
-use std::sync::{mpsc, Arc, RwLock};
+use std::sync::{mpsc, Arc};
+use std::time::Duration;
 
-use crate::channel;
+use crate::channel::{self, ChannelConfig};
 use crate::config::Config;
 use crate::environment;
-use crate::reactor;
+use crate::environment::Environment;
+use crate::message::*; // {ChannelEvent, ReactorEvent};
+use crate::reactor::{self, ReactorConfig};
 
 pub struct Hub {
-    // config: Config,
-    channels: RwLock<HashMap<String, Arc<dyn channel::Channel>>>,
-    reactors: RwLock<HashMap<String, Arc<dyn reactor::Reactor>>>,
-    environment: Arc<environment::Environment>,
+    // Almost certainly I want _something_ here, but not right now.
 }
 
-pub fn new(config: Config) -> Arc<Hub> {
-    // let slack = channel::slack::foo();
-    // config: config,
-    let hub = Arc::new(Hub {
-        channels: RwLock::new(HashMap::new()),
-        reactors: RwLock::new(HashMap::new()),
-        environment: environment::new(&config),
-    });
+pub fn new() -> Hub {
+    Hub {}
+}
 
-    for (name, cfg) in &config.channels {
-        let constructor = match cfg.class {
-            channel::Type::SlackChannel => channel::slack::new,
-        };
+pub struct ChannelSeed {
+    pub name: String,
+    pub config: ChannelConfig,
+    pub event_handle: mpsc::Sender<ChannelEvent>,
+    pub reply_handle: mpsc::Receiver<ChannelReply>,
+}
 
-        let s = name.to_string();
-
-        let mut channels = hub.channels.write().unwrap();
-        channels.insert(s.clone(), constructor(s, cfg, Arc::downgrade(&hub)));
-    }
-
-    for (name, cfg) in &config.reactors {
-        let constructor = match cfg.class {
-            reactor::Type::EchoReactor => reactor::echo::new,
-        };
-
-        let s = name.to_string();
-
-        let mut reactors = hub.reactors.write().unwrap();
-        reactors.insert(s.clone(), constructor(s, cfg, Arc::downgrade(&hub)));
-    }
-
-    hub
+pub struct ReactorSeed {
+    pub name: String,
+    pub config: ReactorConfig,
+    pub event_handle: mpsc::Receiver<Arc<ReactorEvent>>,
+    pub reply_handle: mpsc::Sender<ReactorReply>,
 }
 
 impl Hub {
-    pub fn run(&self) {
-        info!("here we go!");
+    pub fn run(&self, config: Config) {
+        info!("assembling hub");
 
-        let (tx, rx) = mpsc::channel();
+        let env = environment::new(&config);
 
         let mut handles = vec![];
-        for c in self.channels.read().unwrap().values() {
-            let channel = Arc::clone(&c);
-            let event_channel = tx.clone();
-            let handle = channel.start(event_channel);
+        let mut reactor_senders = vec![];
+        let mut channel_senders = HashMap::new();
+
+        let (event_tx, event_rx) = mpsc::channel();
+        let (reply_tx, reply_rx) = mpsc::channel();
+
+        for (raw_name, cfg) in config.channels {
+            let starter = match cfg.class {
+                channel::Type::SlackChannel => channel::slack::start,
+            };
+
+            let name = format!("channel/{}", raw_name);
+            info!("starting {}", name);
+
+            // we have to send a receiver into the channel, and keep track of
+            // our senders
+            let (channel_tx, channel_rx) = mpsc::channel();
+            channel_senders.insert(name.clone(), channel_tx);
+
+            let seed = ChannelSeed {
+                name,
+                config: cfg,
+                event_handle: event_tx.clone(),
+                reply_handle: channel_rx,
+            };
+
+            let (_addr, handle) = starter(seed);
             handles.push(handle);
         }
 
-        for mut event in rx {
-            event.ensure_complete(&self.environment);
-            debug!("[hub] got event: {:?}", event);
+        for (raw_name, cfg) in config.reactors {
+            let starter = match cfg.class {
+                reactor::Type::EchoReactor => reactor::echo::start,
+            };
 
-            // So, in perl, we collect all the handlers up front, check for
-            // conflicts between those marked exclusive, then run them. I think
-            // probably we *could* do that here, but I have been fighting with
-            // the borrow checker for a good long while now trying to get the
-            // lifetimes to work out correctly (because the handlers need access
-            // to &self, and I can't work out how to tell them that).
-            for reactor in self.reactors.read().unwrap().values() {
-                reactor.react_to(&event);
+            let name = format!("reactor/{}", raw_name);
+            info!("starting {}", name);
+
+            let (reactor_tx, reactor_rx) = mpsc::channel();
+            reactor_senders.push(reactor_tx);
+
+            let seed = ReactorSeed {
+                name,
+                config: cfg,
+                event_handle: reactor_rx,
+                reply_handle: reply_tx.clone(),
+            };
+
+            let (_addr, handle) = starter(seed);
+            handles.push(handle);
+        }
+
+        loop {
+            // write, then block on read.
+            loop {
+                match reply_rx.try_recv() {
+                    Ok(ReactorReply::Message(reply)) => {
+                        // figure out the destination, then send it along
+                        // debug!("sending reply into channel");
+                        let tx = channel_senders.get(&reply.destination).unwrap();
+                        tx.send(ChannelReply::Message(reply)).unwrap();
+                    }
+                    Err(mpsc::TryRecvError::Empty) => break,
+                    Err(mpsc::TryRecvError::Disconnected) => {
+                        panic!("channel hung up on us??");
+                    }
+                }
+            }
+
+            // duration chosen by fair dice roll.
+            match event_rx.recv_timeout(Duration::from_millis(50)) {
+                Ok(message) => {
+                    let reactor_event = Arc::new(self.transmogrify_event(message, &env));
+
+                    // debug!("sending event into reactors");
+
+                    // pass it along into reactors
+                    for tx in &reactor_senders {
+                        let cloned = Arc::clone(&reactor_event);
+                        tx.send(cloned).unwrap();
+                    }
+                }
+                Err(mpsc::RecvTimeoutError::Timeout) => (),
+                Err(mpsc::RecvTimeoutError::Disconnected) => panic!("channel hung up on us??"),
             }
         }
 
-        for handle in handles {
-            handle.join().unwrap();
-        }
+        // this code joins threads, but will never run because of the loop above
+        // for handle in handles { handle.join().unwrap() }
+    }
+
+    fn transmogrify_event(&self, channel_event: ChannelEvent, env: &Environment) -> ReactorEvent {
+        let msg = match channel_event {
+            ChannelEvent::Message(event) => {
+                let user = env.resolve_user(&event);
+
+                ReactorMessage {
+                    text: event.text,
+                    is_public: event.is_public,
+                    was_targeted: event.was_targeted,
+                    from_address: event.from_address,
+                    conversation_address: event.conversation_address,
+                    origin: event.origin,
+                    user: user,
+                }
+            }
+        };
+
+        ReactorEvent::Message(msg)
     }
 }

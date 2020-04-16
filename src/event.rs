@@ -1,10 +1,10 @@
 // use crate::channel::Channel;
-use crate::environment::Environment;
+// use crate::environment::Environment;
 use crate::user::User;
 
 #[derive(Debug)]
 pub enum EventType {
-    Message,
+    // Message,
 }
 
 #[derive(Debug)]
@@ -25,33 +25,4 @@ pub struct Event {
     pub from_channel_name: String,
 }
 
-impl Event {
-    pub fn ensure_complete(&mut self, env: &Environment) {
-        let users = env.user_directory.users.borrow();
-        let user = users
-            .values()
-            .filter(|u| {
-                u.identities
-                    .borrow()
-                    .iter()
-                    .filter(|(name, val)| {
-                        // why are these doubly referenced? dunno, really, but
-                        // the compiler was happy with this!
-                        self.from_address == **val && self.from_channel_name == **name
-                    })
-                    .next()
-                    .is_some()
-            })
-            .next();
-
-        if let Some(u) = user {
-            // cloning is gross here, but I don't want to futz with references
-            // and lifetimes at the moment
-            self.from_user = Some(u.clone());
-        }
-    }
-
-    pub fn reply(&self, text: &str) {
-        info!("TODO: work out replies");
-    }
-}
+impl Event {}
