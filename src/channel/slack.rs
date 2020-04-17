@@ -13,7 +13,6 @@ use crate::hub::ChannelSeed;
 use crate::message::{ChannelEvent, ChannelMessage, ChannelReply};
 
 type Websocket = tungstenite::protocol::WebSocket<tungstenite::client::AutoStream>;
-type TungsteniteResult = Result<tungstenite::Message, tungstenite::Error>;
 
 pub struct Slack {
     pub name: String,
@@ -91,9 +90,6 @@ impl Slack {
     fn start(&self) -> ! {
         let mut ws = self.get_websocket().expect("Error connecting to slack!");
 
-        // TODO here, we also need a channel to send events
-        let mut have_set_nb = false;
-
         loop {
             loop {
                 match self.reply_rx.try_recv() {
@@ -116,22 +112,26 @@ impl Slack {
                 }
             }
 
-            let raw_event = match self.process_ws_message(ws.read_message()) {
+            let message = match ws.read_message() {
+                Ok(m) => m,
+                Err(tungstenite::error::Error::Io(e)) => {
+                    if e.kind() == WouldBlock {
+                        continue;
+                    }
+
+                    info!("IO error reading from websocket: {:?}", e);
+                    continue;
+                }
+                Err(e) => {
+                    info!("error reading from websocket: {:?}", e);
+                    continue;
+                }
+            };
+
+            let raw_event = match self.process_ws_message(message) {
                 Some(raw) => raw,
                 None => continue,
             };
-
-            if !have_set_nb {
-                info!("setting slack websocket to non-blocking...");
-                if let tungstenite::stream::Stream::Tls(stream) = ws.get_mut() {
-                    stream
-                        .get_mut()
-                        .set_read_timeout(Some(Duration::from_millis(25)))
-                        .unwrap();
-                }
-
-                have_set_nb = true;
-            }
 
             let msg = self.message_from_raw(raw_event);
 
@@ -172,30 +172,22 @@ impl Slack {
         self.our_name.replace(Some(data.me.name));
         self.our_id.replace(Some(data.me.id));
 
-        let (websocket, _resp) = tungstenite::client::connect(data.url)?;
+        let (mut websocket, _resp) = tungstenite::client::connect(data.url)?;
 
         info!("connected to slack");
+
+        debug!("setting slack websocket to non-blocking...");
+        if let tungstenite::stream::Stream::Tls(stream) = websocket.get_mut() {
+            stream
+                .get_mut()
+                .set_read_timeout(Some(Duration::from_millis(50)))
+                .unwrap();
+        }
 
         Ok(websocket)
     }
 
-    fn process_ws_message(&self, raw: TungsteniteResult) -> Option<RawEvent> {
-        let message = match raw {
-            Ok(m) => m,
-            Err(tungstenite::error::Error::Io(e)) => {
-                if e.kind() == WouldBlock {
-                    return None;
-                }
-
-                info!("error reading from websocket: {:?}", e);
-                return None;
-            }
-            Err(e) => {
-                info!("error reading from websocket: {:?}", e);
-                return None;
-            }
-        };
-
+    fn process_ws_message(&self, message: tungstenite::Message) -> Option<RawEvent> {
         let frame = match message {
             tungstenite::Message::Text(ref s) => s,
             tungstenite::Message::Close(_) => {
