@@ -17,6 +17,11 @@ pub struct Term {
     reply_rx: mpsc::Receiver<ChannelReply>,
 }
 
+enum TermValue {
+    Text(String),
+    EOF,
+}
+
 pub fn start(seed: ChannelSeed) -> (String, thread::JoinHandle<()>) {
     let name = seed.name.clone();
 
@@ -91,15 +96,34 @@ impl Term {
                 need_prompt = false;
             }
 
-            let text = match stdin_rx.recv_timeout(Duration::from_millis(100)) {
-                Ok(s) => s.trim().to_string(),
+            let value = match stdin_rx.recv_timeout(Duration::from_millis(100)) {
+                Ok(s) => {
+                    // 0 bytes here is EOF, blank line is just '\n'
+                    if s.is_empty() {
+                        TermValue::EOF
+                    } else {
+                        TermValue::Text(s.trim().to_string())
+                    }
+                }
                 Err(mpsc::RecvTimeoutError::Timeout) => continue,
                 Err(mpsc::RecvTimeoutError::Disconnected) => {
                     panic!("stdin hung up on us?");
                 }
             };
 
-            // TODO: figure out how to deal with EOF and send SIGINT to parent.
+            if let TermValue::EOF = value {}
+
+            let text = match value {
+                TermValue::EOF => {
+                    // TODO: figure out how to deal with EOF and send SIGINT to parent.
+                    println!("");
+                    warn!("need to deal with eof properly");
+                    need_prompt = true;
+                    continue;
+                }
+                TermValue::Text(s) => s,
+            };
+
             if text.is_empty() {
                 continue;
             }
