@@ -1,4 +1,4 @@
-use std::sync::{mpsc, Arc};
+use std::sync::mpsc;
 use std::thread;
 
 use crate::hub::ReactorSeed;
@@ -7,7 +7,7 @@ use crate::message::{ReactorEvent, ReactorMessage, ReactorReply};
 pub struct Echo {
     name: String,
     reply_tx: mpsc::Sender<ReactorReply>,
-    event_rx: mpsc::Receiver<Arc<ReactorEvent>>,
+    event_rx: mpsc::Receiver<ReactorEvent>,
 }
 
 pub fn new(seed: ReactorSeed) -> Echo {
@@ -31,10 +31,8 @@ pub fn start(seed: ReactorSeed) -> (String, thread::JoinHandle<()>) {
 
 impl Echo {
     fn start(&self) {
-        use std::borrow::Borrow;
-
         for reactor_event in &self.event_rx {
-            match reactor_event.borrow() {
+            match reactor_event {
                 ReactorEvent::Message(event) => {
                     self.handle_echo(&event);
                 }

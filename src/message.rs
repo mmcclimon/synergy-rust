@@ -22,7 +22,7 @@ pub struct ChannelMessage {
     pub origin: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ReactorEvent {
     Message(ReactorMessage),
 }
@@ -32,7 +32,7 @@ pub enum ReactorReply {
     Message(Reply),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ReactorMessage {
     pub text: String,
     pub is_public: bool,

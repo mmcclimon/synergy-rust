@@ -22,7 +22,7 @@ pub fn init() {
         let mut style = f.style();
         let level = colored_level(&mut style, record.level());
 
-        writeln!(f, "{} {}", level, record.args())
+        writeln!(f, "{} [{}] {}", level, f.timestamp_millis(), record.args())
     });
     logger.init();
 }

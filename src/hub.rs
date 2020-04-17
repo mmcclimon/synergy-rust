@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::{mpsc, Arc};
+use std::sync::mpsc;
 use std::time::Duration;
 
 use crate::channel::{self, ChannelConfig};
@@ -27,7 +27,7 @@ pub struct ChannelSeed {
 pub struct ReactorSeed {
     pub name: String,
     pub config: ReactorConfig,
-    pub event_handle: mpsc::Receiver<Arc<ReactorEvent>>,
+    pub event_handle: mpsc::Receiver<ReactorEvent>,
     pub reply_handle: mpsc::Sender<ReactorReply>,
 }
 
@@ -108,15 +108,15 @@ impl Hub {
             }
 
             // duration chosen by fair dice roll.
-            match event_rx.recv_timeout(Duration::from_millis(50)) {
+            match event_rx.recv_timeout(Duration::from_millis(15)) {
                 Ok(message) => {
-                    let reactor_event = Arc::new(self.transmogrify_event(message, &env));
+                    let reactor_event = self.transmogrify_event(message, &env);
 
                     // debug!("sending event into reactors");
 
                     // pass it along into reactors
                     for tx in &reactor_senders {
-                        let cloned = Arc::clone(&reactor_event);
+                        let cloned = reactor_event.clone();
                         tx.send(cloned).unwrap();
                     }
                 }
