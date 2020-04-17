@@ -3,6 +3,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
+use colorful::Colorful;
 use toml::value::Value;
 
 use crate::hub::ChannelSeed;
@@ -69,11 +70,12 @@ impl Term {
                 match self.reply_rx.try_recv() {
                     Ok(ChannelReply::Message(reply)) => {
                         let indented = reply.text.replace("\n", "\n  ");
-                        println!(
+                        let text = format!(
                             ">> {}!{} |\n  {}",
-                            &self.name, &reply.conversation_address, indented
+                            &self.name, &reply.conversation_address, indented,
                         );
 
+                        println!("{}", text.magenta());
                         need_prompt = true;
                     }
                     Err(mpsc::TryRecvError::Empty) => break,
@@ -84,7 +86,7 @@ impl Term {
             }
 
             if need_prompt {
-                print!("synergy> ");
+                print!("{}", "rustergy> ".cyan());
                 stdout.flush().unwrap();
                 need_prompt = false;
             }
