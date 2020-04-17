@@ -1,8 +1,10 @@
 use std::cell::RefCell;
 use std::error::Error;
 use std::fmt;
+use std::io::ErrorKind::WouldBlock;
 use std::sync::mpsc;
 use std::thread;
+use std::time::Duration;
 
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
@@ -90,6 +92,7 @@ impl Slack {
         let mut ws = self.get_websocket().expect("Error connecting to slack!");
 
         // TODO here, we also need a channel to send events
+        let mut have_set_nb = false;
 
         loop {
             loop {
@@ -101,9 +104,9 @@ impl Slack {
                             channel: reply.conversation_address,
                         };
 
-                        debug!("sending message: {:?}", to_send);
-
                         let text = serde_json::to_string(&to_send).unwrap();
+
+                        debug!("writing message: {:?}", to_send);
                         ws.write_message(tungstenite::Message::Text(text)).unwrap();
                     }
                     Err(mpsc::TryRecvError::Empty) => break,
@@ -113,11 +116,22 @@ impl Slack {
                 }
             }
 
-            // XXX this is blocking, and I don't want it to be.
             let raw_event = match self.process_ws_message(ws.read_message()) {
                 Some(raw) => raw,
                 None => continue,
             };
+
+            if !have_set_nb {
+                info!("setting slack websocket to non-blocking...");
+                if let tungstenite::stream::Stream::Tls(stream) = ws.get_mut() {
+                    stream
+                        .get_mut()
+                        .set_read_timeout(Some(Duration::from_millis(25)))
+                        .unwrap();
+                }
+
+                have_set_nb = true;
+            }
 
             let msg = self.message_from_raw(raw_event);
 
@@ -168,6 +182,14 @@ impl Slack {
     fn process_ws_message(&self, raw: TungsteniteResult) -> Option<RawEvent> {
         let message = match raw {
             Ok(m) => m,
+            Err(tungstenite::error::Error::Io(e)) => {
+                if e.kind() == WouldBlock {
+                    return None;
+                }
+
+                info!("error reading from websocket: {:?}", e);
+                return None;
+            }
             Err(e) => {
                 info!("error reading from websocket: {:?}", e);
                 return None;
