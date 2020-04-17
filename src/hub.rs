@@ -47,6 +47,7 @@ impl Hub {
         for (raw_name, cfg) in config.channels {
             let starter = match cfg.class {
                 channel::Type::SlackChannel => channel::slack::start,
+                channel::Type::TermChannel => channel::term::start,
             };
 
             let name = format!("channel/{}", raw_name);

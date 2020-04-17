@@ -1,4 +1,5 @@
 pub mod slack;
+pub mod term;
 
 use std::sync::mpsc;
 use std::thread;
@@ -12,6 +13,7 @@ use crate::event;
 #[derive(Deserialize, Debug)]
 pub enum Type {
     SlackChannel,
+    TermChannel,
 }
 
 pub type ChannelConfig = config::ComponentConfig<Type>;
