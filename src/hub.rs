@@ -110,8 +110,9 @@ impl Hub {
 
             // duration chosen by fair dice roll.
             match event_rx.recv_timeout(Duration::from_millis(15)) {
-                Ok(message) => {
-                    let reactor_event = self.transmogrify_event(message, &env);
+                Ok(ChannelEvent::Hangup) => self.shutdown(),
+                Ok(ChannelEvent::Message(message)) => {
+                    let reactor_event = self.transmogrify_message(message, &env);
 
                     // debug!("sending event into reactors");
 
@@ -130,23 +131,20 @@ impl Hub {
         // for handle in handles { handle.join().unwrap() }
     }
 
-    fn transmogrify_event(&self, channel_event: ChannelEvent, env: &Environment) -> ReactorEvent {
-        let msg = match channel_event {
-            ChannelEvent::Message(event) => {
-                let user = env.resolve_user(&event);
+    fn shutdown(&self) {
+        warn!("need shutdown code!");
+    }
 
-                ReactorMessage {
-                    text: event.text,
-                    is_public: event.is_public,
-                    was_targeted: event.was_targeted,
-                    from_address: event.from_address,
-                    conversation_address: event.conversation_address,
-                    origin: event.origin,
-                    user: user,
-                }
-            }
-        };
-
-        ReactorEvent::Message(msg)
+    fn transmogrify_message(&self, event: ChannelMessage, env: &Environment) -> ReactorEvent {
+        let user = env.resolve_user(&event);
+        ReactorEvent::Message(ReactorMessage {
+            text: event.text,
+            is_public: event.is_public,
+            was_targeted: event.was_targeted,
+            from_address: event.from_address,
+            conversation_address: event.conversation_address,
+            origin: event.origin,
+            user: user,
+        })
     }
 }

@@ -5,6 +5,7 @@ use crate::user::User;
 #[derive(Debug)]
 pub enum ChannelEvent {
     Message(ChannelMessage),
+    Hangup,
 }
 
 #[derive(Debug)]

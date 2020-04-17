@@ -111,15 +111,11 @@ impl Term {
                 }
             };
 
-            if let TermValue::EOF = value {}
-
             let text = match value {
                 TermValue::EOF => {
-                    // TODO: figure out how to deal with EOF and send SIGINT to parent.
-                    println!("");
-                    warn!("need to deal with eof properly");
-                    need_prompt = true;
-                    continue;
+                    println!(""); // so log line doesn't show up on prompt line
+                    self.event_tx.send(ChannelEvent::Hangup).unwrap();
+                    break;
                 }
                 TermValue::Text(s) => s,
             };
