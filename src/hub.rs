@@ -1,20 +1,29 @@
 use std::collections::HashMap;
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc};
+use std::thread::JoinHandle;
 use std::time::Duration;
 
 use crate::channel::{self, ChannelConfig};
 use crate::config::Config;
-use crate::environment;
-use crate::environment::Environment;
+use crate::environment::{self, Environment};
 use crate::message::*; // {ChannelEvent, ReactorEvent};
 use crate::reactor::{self, ReactorConfig};
 
 pub struct Hub {
     // Almost certainly I want _something_ here, but not right now.
+    child_handles: Vec<JoinHandle<()>>,
+    channel_senders: HashMap<String, mpsc::Sender<ChannelReply>>,
+    reactor_senders: Vec<mpsc::Sender<ReactorEvent>>,
+    env: Option<Arc<Environment>>,
 }
 
 pub fn new() -> Hub {
-    Hub {}
+    Hub {
+        child_handles: vec![],
+        reactor_senders: vec![],
+        channel_senders: HashMap::new(),
+        env: None,
+    }
 }
 
 pub struct ChannelSeed {
@@ -32,14 +41,10 @@ pub struct ReactorSeed {
 }
 
 impl Hub {
-    pub fn run(&self, config: Config) {
+    pub fn run(&mut self, config: Config) {
         info!("assembling hub");
 
-        let env = environment::new(&config);
-
-        let mut handles = vec![];
-        let mut reactor_senders = vec![];
-        let mut channel_senders = HashMap::new();
+        self.env = Some(environment::new(&config));
 
         let (event_tx, event_rx) = mpsc::channel();
         let (reply_tx, reply_rx) = mpsc::channel();
@@ -56,7 +61,7 @@ impl Hub {
             // we have to send a receiver into the channel, and keep track of
             // our senders
             let (channel_tx, channel_rx) = mpsc::channel();
-            channel_senders.insert(name.clone(), channel_tx);
+            self.channel_senders.insert(name.clone(), channel_tx);
 
             let seed = ChannelSeed {
                 name,
@@ -66,7 +71,7 @@ impl Hub {
             };
 
             let (_addr, handle) = starter(seed);
-            handles.push(handle);
+            self.child_handles.push(handle);
         }
 
         for (raw_name, cfg) in config.reactors {
@@ -78,7 +83,7 @@ impl Hub {
             info!("starting {}", name);
 
             let (reactor_tx, reactor_rx) = mpsc::channel();
-            reactor_senders.push(reactor_tx);
+            self.reactor_senders.push(reactor_tx);
 
             let seed = ReactorSeed {
                 name,
@@ -88,7 +93,7 @@ impl Hub {
             };
 
             let (_addr, handle) = starter(seed);
-            handles.push(handle);
+            self.child_handles.push(handle);
         }
 
         loop {
@@ -98,7 +103,7 @@ impl Hub {
                     Ok(ReactorReply::Message(reply)) => {
                         // figure out the destination, then send it along
                         // debug!("sending reply into channel");
-                        let tx = channel_senders.get(&reply.destination).unwrap();
+                        let tx = self.channel_senders.get(&reply.destination).unwrap();
                         tx.send(ChannelReply::Message(reply)).unwrap();
                     }
                     Err(mpsc::TryRecvError::Empty) => break,
@@ -112,12 +117,12 @@ impl Hub {
             match event_rx.recv_timeout(Duration::from_millis(15)) {
                 Ok(ChannelEvent::Hangup) => self.shutdown(),
                 Ok(ChannelEvent::Message(message)) => {
-                    let reactor_event = self.transmogrify_message(message, &env);
+                    let reactor_event = self.transmogrify_message(message);
 
                     // debug!("sending event into reactors");
 
                     // pass it along into reactors
-                    for tx in &reactor_senders {
+                    for tx in &self.reactor_senders {
                         let cloned = reactor_event.clone();
                         tx.send(cloned).unwrap();
                     }
@@ -135,8 +140,8 @@ impl Hub {
         warn!("need shutdown code!");
     }
 
-    fn transmogrify_message(&self, event: ChannelMessage, env: &Environment) -> ReactorEvent {
-        let user = env.resolve_user(&event);
+    fn transmogrify_message(&self, event: ChannelMessage) -> ReactorEvent {
+        let user = self.env.as_ref().unwrap().resolve_user(&event);
         ReactorEvent::Message(ReactorMessage {
             text: event.text,
             is_public: event.is_public,

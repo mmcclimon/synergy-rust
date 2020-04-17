@@ -41,7 +41,7 @@ fn main() {
     }
 
     let config = config::new("config.toml");
-    let hub = hub::new();
+    let mut hub = hub::new();
 
     if matches.opt_present("no-connect") {
         info!("exiting early because --no-connect was passed");
