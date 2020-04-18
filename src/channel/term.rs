@@ -69,10 +69,11 @@ impl Term {
         let mut stdout = io::stdout();
         let mut need_prompt = true;
 
-        loop {
-            loop {
+        'outer: loop {
+            'inner: loop {
                 // flush the queue
                 match self.reply_rx.try_recv() {
+                    Ok(ChannelReply::Hangup) => break 'outer,
                     Ok(ChannelReply::Message(reply)) => {
                         let indented = reply.text.replace("\n", "\n  ");
                         let text = format!(
@@ -83,7 +84,7 @@ impl Term {
                         println!("{}", text.magenta());
                         need_prompt = true;
                     }
-                    Err(mpsc::TryRecvError::Empty) => break,
+                    Err(mpsc::TryRecvError::Empty) => break 'inner,
                     Err(mpsc::TryRecvError::Disconnected) => {
                         panic!("hub hung up on us?");
                     }
@@ -113,7 +114,7 @@ impl Term {
 
             let text = match value {
                 TermValue::EOF => {
-                    println!(""); // so log line doesn't show up on prompt line
+                    println!(); // so log line doesn't show up on prompt line
                     self.event_tx.send(ChannelEvent::Hangup).unwrap();
                     break;
                 }
@@ -126,7 +127,7 @@ impl Term {
 
             let msg = ChannelEvent::Message(ChannelMessage {
                 // TODO: fill these in properly
-                text: text,
+                text,
                 is_public: false,
                 was_targeted: true,
                 from_address: self.from_addr.clone(),

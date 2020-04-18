@@ -61,19 +61,20 @@ pub fn start(seed: ChannelSeed) -> (String, thread::JoinHandle<()>) {
 }
 
 impl Slack {
-    fn start(&self) -> ! {
+    fn start(&self) {
         let me = self.rtm_client.connect(&self.api_token);
 
         self.our_name.replace(Some(me.name));
         self.our_id.replace(Some(me.id));
 
-        loop {
-            loop {
+        'outer: loop {
+            'inner: loop {
                 match self.reply_rx.try_recv() {
+                    Ok(ChannelReply::Hangup) => break 'outer,
                     Ok(ChannelReply::Message(reply)) => {
                         self.rtm_client.send(reply);
                     }
-                    Err(mpsc::TryRecvError::Empty) => break,
+                    Err(mpsc::TryRecvError::Empty) => break 'inner,
                     Err(mpsc::TryRecvError::Disconnected) => {
                         panic!("hub hung up on us?");
                     }

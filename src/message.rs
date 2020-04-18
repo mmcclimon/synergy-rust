@@ -11,6 +11,7 @@ pub enum ChannelEvent {
 #[derive(Debug)]
 pub enum ChannelReply {
     Message(Reply),
+    Hangup,
 }
 
 #[derive(Debug)]
@@ -26,11 +27,15 @@ pub struct ChannelMessage {
 #[derive(Debug, Clone)]
 pub enum ReactorEvent {
     Message(ReactorMessage),
+    Hangup,
 }
 
 #[derive(Debug)]
 pub enum ReactorReply {
     Message(Reply),
+
+    #[allow(dead_code)] // this is here for completeness
+    Hangup,
 }
 
 #[derive(Debug, Clone)]
@@ -72,6 +77,7 @@ impl From<ReactorReply> for ChannelReply {
     fn from(r: ReactorReply) -> Self {
         match r {
             ReactorReply::Message(reply) => ChannelReply::Message(reply.clone()),
+            ReactorReply::Hangup => ChannelReply::Hangup,
         }
     }
 }

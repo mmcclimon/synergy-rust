@@ -33,6 +33,7 @@ impl Echo {
     fn start(&self) {
         for reactor_event in &self.event_rx {
             match reactor_event {
+                ReactorEvent::Hangup => break,
                 ReactorEvent::Message(event) => {
                     self.handle_echo(&event);
                 }

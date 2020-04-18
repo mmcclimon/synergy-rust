@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::process;
 use std::sync::{mpsc, Arc};
 use std::thread::JoinHandle;
 use std::time::Duration;
@@ -49,57 +50,24 @@ impl Hub {
         let (event_tx, event_rx) = mpsc::channel();
         let (reply_tx, reply_rx) = mpsc::channel();
 
-        for (raw_name, cfg) in config.channels {
-            let starter = match cfg.class {
-                channel::Type::SlackChannel => channel::slack::start,
-                channel::Type::TermChannel => channel::term::start,
-            };
+        // Send the sending end into the channel/reactor as appropriate. These
+        // methods set up the other direction, and store themselves as state
+        self.assemble_channels(event_tx, config.channels);
+        self.assemble_reactors(reply_tx, config.reactors);
 
-            let name = format!("channel/{}", raw_name);
-            info!("starting {}", name);
+        self.listen(event_rx, reply_rx);
+    }
 
-            // we have to send a receiver into the channel, and keep track of
-            // our senders
-            let (channel_tx, channel_rx) = mpsc::channel();
-            self.channel_senders.insert(name.clone(), channel_tx);
-
-            let seed = ChannelSeed {
-                name,
-                config: cfg,
-                event_handle: event_tx.clone(),
-                reply_handle: channel_rx,
-            };
-
-            let (_addr, handle) = starter(seed);
-            self.child_handles.push(handle);
-        }
-
-        for (raw_name, cfg) in config.reactors {
-            let starter = match cfg.class {
-                reactor::Type::EchoReactor => reactor::echo::start,
-            };
-
-            let name = format!("reactor/{}", raw_name);
-            info!("starting {}", name);
-
-            let (reactor_tx, reactor_rx) = mpsc::channel();
-            self.reactor_senders.push(reactor_tx);
-
-            let seed = ReactorSeed {
-                name,
-                config: cfg,
-                event_handle: reactor_rx,
-                reply_handle: reply_tx.clone(),
-            };
-
-            let (_addr, handle) = starter(seed);
-            self.child_handles.push(handle);
-        }
-
+    pub fn listen(
+        &mut self,
+        event_rx: mpsc::Receiver<ChannelEvent>,
+        reply_rx: mpsc::Receiver<ReactorReply>,
+    ) {
         loop {
             // write, then block on read.
             loop {
                 match reply_rx.try_recv() {
+                    Ok(ReactorReply::Hangup) => self.shutdown(),
                     Ok(ReactorReply::Message(reply)) => {
                         // figure out the destination, then send it along
                         // debug!("sending reply into channel");
@@ -136,8 +104,85 @@ impl Hub {
         // for handle in handles { handle.join().unwrap() }
     }
 
-    fn shutdown(&self) {
-        warn!("need shutdown code!");
+    fn assemble_channels(
+        &mut self,
+        event_tx: mpsc::Sender<ChannelEvent>,
+        channel_config: HashMap<String, ChannelConfig>,
+    ) {
+        for (raw_name, config) in channel_config {
+            let starter = match config.class {
+                channel::Type::SlackChannel => channel::slack::start,
+                channel::Type::TermChannel => channel::term::start,
+            };
+
+            let name = format!("channel/{}", raw_name);
+            info!("starting {}", name);
+
+            // we have to send a receiver into the channel, and keep track of
+            // our senders
+            let (channel_tx, channel_rx) = mpsc::channel();
+            self.channel_senders.insert(name.clone(), channel_tx);
+
+            let seed = ChannelSeed {
+                name,
+                config,
+                event_handle: event_tx.clone(),
+                reply_handle: channel_rx,
+            };
+
+            let (_addr, handle) = starter(seed);
+            self.child_handles.push(handle);
+        }
+    }
+
+    fn assemble_reactors(
+        &mut self,
+        reply_tx: mpsc::Sender<ReactorReply>,
+        reactor_config: HashMap<String, ReactorConfig>,
+    ) {
+        for (raw_name, config) in reactor_config {
+            let starter = match config.class {
+                reactor::Type::EchoReactor => reactor::echo::start,
+            };
+
+            let name = format!("reactor/{}", raw_name);
+            info!("starting {}", name);
+
+            let (reactor_tx, reactor_rx) = mpsc::channel();
+            self.reactor_senders.push(reactor_tx);
+
+            let seed = ReactorSeed {
+                name,
+                config,
+                event_handle: reactor_rx,
+                reply_handle: reply_tx.clone(),
+            };
+
+            let (_addr, handle) = starter(seed);
+            self.child_handles.push(handle);
+        }
+    }
+
+    fn shutdown(&mut self) {
+        // we ignore all errors here, because presumably they're just because
+        // something has already hung up on us.
+        info!("telling reactors to shut down...");
+        for tx in self.reactor_senders.drain(..) {
+            tx.send(ReactorEvent::Hangup).unwrap_or(());
+        }
+
+        info!("telling channels to shut down...");
+        for (_, tx) in self.channel_senders.drain() {
+            tx.send(ChannelReply::Hangup).unwrap_or(());
+        }
+
+        info!("waiting for cleanup...");
+        for handle in self.child_handles.drain(..) {
+            handle.join().unwrap_or(());
+        }
+
+        info!("goodbye!");
+        process::exit(0);
     }
 
     fn transmogrify_message(&self, event: ChannelMessage) -> ReactorEvent {
@@ -149,7 +194,7 @@ impl Hub {
             from_address: event.from_address,
             conversation_address: event.conversation_address,
             origin: event.origin,
-            user: user,
+            user,
         })
     }
 }
