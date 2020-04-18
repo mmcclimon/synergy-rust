@@ -17,7 +17,7 @@ does I/O, there might be a slack channel, a twilio channel, or a console
 channel. they produce events, which are responded to by _Reactors_. Here,
 they're set up with mpsc::channels. In the lingo here, _Events_ flow from
 channels through the hub to reactors, and _Replies_ flow from reactors through
-the hub back to channels (where they are output). 
+the hub back to channels (where they are output).
 
 All the channels and reactors do their work in threads. Right now, the hub
 does all the transmogrification of channels and events synchronously, but
@@ -36,8 +36,7 @@ Here's a crappy sketch.
       +--< Channels <--+
       |                |
       |                |
- ChannelEvents    ChannelReplies
-      |                |
+    Events          Replies
       |                |
       |                |
       |    +-----+     |
@@ -49,9 +48,8 @@ Here's a crappy sketch.
       |    +-----+     |
       |                |
       |                |
- ReactorEvents    ReactorReplies
+    Events          Replies
       |                |
       |                |
       +--> Reactors >--+
 ```
-

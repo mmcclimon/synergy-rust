@@ -2,13 +2,11 @@ pub mod slack;
 pub mod term;
 
 use std::sync::mpsc;
-use std::thread;
 
 use serde::Deserialize;
 
 use crate::config;
-use crate::event;
-use crate::message::{ChannelEvent, ChannelMessage, ChannelReply, Reply};
+use crate::message::{Event, Message, Reply};
 
 // known channels
 #[derive(Deserialize, Debug)]
@@ -26,8 +24,15 @@ pub enum ReplyResponse {
     Sent,
 }
 
+pub struct Seed {
+    pub name: String,
+    pub config: ChannelConfig,
+    pub event_handle: mpsc::Sender<Message<Event>>,
+    pub reply_handle: mpsc::Receiver<Message<Reply>>,
+}
+
 pub trait Channel {
-    fn receiver(&self) -> &mpsc::Receiver<ChannelReply>;
+    fn receiver(&self) -> &mpsc::Receiver<Message<Reply>>;
 
     fn send_reply(&self, r: Reply);
 
@@ -36,8 +41,8 @@ pub trait Channel {
 
         loop {
             match self.receiver().try_recv() {
-                Ok(ChannelReply::Hangup) => return ReplyResponse::Hangup,
-                Ok(ChannelReply::Message(reply)) => {
+                Ok(Message::Hangup) => return ReplyResponse::Hangup,
+                Ok(Message::Text(reply)) => {
                     self.send_reply(reply);
                     did_send = true;
                 }

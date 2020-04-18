@@ -4,7 +4,7 @@ use std::sync::Arc;
 use rusqlite::{Connection, NO_PARAMS};
 
 use crate::config::Config;
-use crate::message::ChannelMessage;
+use crate::message::Event;
 use crate::user::User;
 use crate::user_directory::Directory;
 
@@ -45,7 +45,7 @@ impl fmt::Debug for Environment {
 }
 
 impl Environment {
-    pub fn resolve_user(&self, event: &ChannelMessage) -> Option<User> {
+    pub fn resolve_user(&self, event: &Event) -> Option<User> {
         self.user_directory.resolve_user(&event)
     }
 

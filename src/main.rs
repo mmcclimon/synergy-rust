@@ -5,7 +5,6 @@ extern crate getopts;
 mod channel;
 mod config;
 mod environment;
-mod event;
 mod hub;
 mod logger;
 mod message;

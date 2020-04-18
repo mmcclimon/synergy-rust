@@ -7,14 +7,14 @@ use std::time::Duration;
 use crate::channel::{self, ChannelConfig};
 use crate::config::Config;
 use crate::environment::{self, Environment};
-use crate::message::*; // {ChannelEvent, ReactorEvent};
+use crate::message::{Event, Message, Reply};
 use crate::reactor::{self, ReactorConfig};
 
 pub struct Hub {
     // Almost certainly I want _something_ here, but not right now.
     child_handles: Vec<JoinHandle<()>>,
-    channel_senders: HashMap<String, mpsc::Sender<ChannelReply>>,
-    reactor_senders: Vec<mpsc::Sender<ReactorEvent>>,
+    channel_senders: HashMap<String, mpsc::Sender<Message<Reply>>>,
+    reactor_senders: Vec<mpsc::Sender<Message<Event>>>,
     env: Option<Arc<Environment>>,
 }
 
@@ -25,20 +25,6 @@ pub fn new() -> Hub {
         channel_senders: HashMap::new(),
         env: None,
     }
-}
-
-pub struct ChannelSeed {
-    pub name: String,
-    pub config: ChannelConfig,
-    pub event_handle: mpsc::Sender<ChannelEvent>,
-    pub reply_handle: mpsc::Receiver<ChannelReply>,
-}
-
-pub struct ReactorSeed {
-    pub name: String,
-    pub config: ReactorConfig,
-    pub event_handle: mpsc::Receiver<ReactorEvent>,
-    pub reply_handle: mpsc::Sender<ReactorReply>,
 }
 
 impl Hub {
@@ -60,19 +46,19 @@ impl Hub {
 
     pub fn listen(
         &mut self,
-        event_rx: mpsc::Receiver<ChannelEvent>,
-        reply_rx: mpsc::Receiver<ReactorReply>,
+        event_rx: mpsc::Receiver<Message<Event>>,
+        reply_rx: mpsc::Receiver<Message<Reply>>,
     ) {
         loop {
             // write, then block on read.
             loop {
                 match reply_rx.try_recv() {
-                    Ok(ReactorReply::Hangup) => self.shutdown(),
-                    Ok(ReactorReply::Message(reply)) => {
+                    Ok(Message::Hangup) => self.shutdown(),
+                    Ok(Message::Text(reply)) => {
                         // figure out the destination, then send it along
                         // debug!("sending reply into channel");
                         let tx = self.channel_senders.get(&reply.destination).unwrap();
-                        tx.send(ChannelReply::Message(reply)).unwrap();
+                        tx.send(Message::Text(reply)).unwrap();
                     }
                     Err(mpsc::TryRecvError::Empty) => break,
                     Err(mpsc::TryRecvError::Disconnected) => {
@@ -83,16 +69,16 @@ impl Hub {
 
             // duration chosen by fair dice roll.
             match event_rx.recv_timeout(Duration::from_millis(15)) {
-                Ok(ChannelEvent::Hangup) => self.shutdown(),
-                Ok(ChannelEvent::Message(message)) => {
-                    let reactor_event = self.transmogrify_message(message);
+                Ok(Message::Hangup) => self.shutdown(),
+                Ok(Message::Text(ref mut event)) => {
+                    self.transmogrify_event(event);
 
                     // debug!("sending event into reactors");
 
                     // pass it along into reactors
                     for tx in &self.reactor_senders {
-                        let cloned = reactor_event.clone();
-                        tx.send(cloned).unwrap();
+                        let cloned = event.clone();
+                        tx.send(Message::Text(cloned)).unwrap();
                     }
                 }
                 Err(mpsc::RecvTimeoutError::Timeout) => (),
@@ -106,7 +92,7 @@ impl Hub {
 
     fn assemble_channels(
         &mut self,
-        event_tx: mpsc::Sender<ChannelEvent>,
+        event_tx: mpsc::Sender<Message<Event>>,
         channel_config: HashMap<String, ChannelConfig>,
     ) {
         for (raw_name, config) in channel_config {
@@ -123,7 +109,7 @@ impl Hub {
             let (channel_tx, channel_rx) = mpsc::channel();
             self.channel_senders.insert(name.clone(), channel_tx);
 
-            let seed = ChannelSeed {
+            let seed = channel::Seed {
                 name,
                 config,
                 event_handle: event_tx.clone(),
@@ -137,7 +123,7 @@ impl Hub {
 
     fn assemble_reactors(
         &mut self,
-        reply_tx: mpsc::Sender<ReactorReply>,
+        reply_tx: mpsc::Sender<Message<Reply>>,
         reactor_config: HashMap<String, ReactorConfig>,
     ) {
         for (raw_name, config) in reactor_config {
@@ -151,7 +137,7 @@ impl Hub {
             let (reactor_tx, reactor_rx) = mpsc::channel();
             self.reactor_senders.push(reactor_tx);
 
-            let seed = ReactorSeed {
+            let seed = reactor::Seed {
                 name,
                 config,
                 event_handle: reactor_rx,
@@ -168,12 +154,12 @@ impl Hub {
         // something has already hung up on us.
         info!("telling reactors to shut down...");
         for tx in self.reactor_senders.drain(..) {
-            tx.send(ReactorEvent::Hangup).unwrap_or(());
+            tx.send(Message::Hangup).unwrap_or(());
         }
 
         info!("telling channels to shut down...");
         for (_, tx) in self.channel_senders.drain() {
-            tx.send(ChannelReply::Hangup).unwrap_or(());
+            tx.send(Message::Hangup).unwrap_or(());
         }
 
         info!("waiting for cleanup...");
@@ -185,16 +171,8 @@ impl Hub {
         process::exit(0);
     }
 
-    fn transmogrify_message(&self, event: ChannelMessage) -> ReactorEvent {
+    fn transmogrify_event(&self, event: &mut Event) {
         let user = self.env.as_ref().unwrap().resolve_user(&event);
-        ReactorEvent::Message(ReactorMessage {
-            text: event.text,
-            is_public: event.is_public,
-            was_targeted: event.was_targeted,
-            from_address: event.from_address,
-            conversation_address: event.conversation_address,
-            origin: event.origin,
-            user,
-        })
+        event.user = user;
     }
 }

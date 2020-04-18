@@ -6,16 +6,15 @@ use std::time::Duration;
 use colorful::Colorful;
 use toml::value::Value;
 
-use crate::channel::{Channel, ReplyResponse};
-use crate::hub::ChannelSeed;
-use crate::message::{ChannelEvent, ChannelMessage, ChannelReply, Reply};
+use crate::channel::{Channel, ReplyResponse, Seed};
+use crate::message::{Event, Message, Reply};
 
 pub struct Term {
     pub name: String,
     from_addr: String,
     default_public_reply_addr: String,
-    event_tx: mpsc::Sender<ChannelEvent>,
-    reply_rx: mpsc::Receiver<ChannelReply>,
+    event_tx: mpsc::Sender<Message<Event>>,
+    reply_rx: mpsc::Receiver<Message<Reply>>,
 }
 
 enum TermValue {
@@ -23,7 +22,7 @@ enum TermValue {
     EOF,
 }
 
-pub fn start(seed: ChannelSeed) -> (String, thread::JoinHandle<()>) {
+pub fn start(seed: Seed) -> (String, thread::JoinHandle<()>) {
     let name = seed.name.clone();
 
     let handle = thread::spawn(move || {
@@ -34,7 +33,7 @@ pub fn start(seed: ChannelSeed) -> (String, thread::JoinHandle<()>) {
     (name, handle)
 }
 
-pub fn new(seed: ChannelSeed) -> Term {
+pub fn new(seed: Seed) -> Term {
     let from = match seed.config.extra.get("from_address") {
         Some(Value::String(s)) => s.as_str(),
         Some(_) => "sysop",
@@ -57,7 +56,7 @@ pub fn new(seed: ChannelSeed) -> Term {
 }
 
 impl Channel for Term {
-    fn receiver(&self) -> &mpsc::Receiver<ChannelReply> {
+    fn receiver(&self) -> &mpsc::Receiver<Message<Reply>> {
         &self.reply_rx
     }
 
@@ -117,7 +116,7 @@ impl Term {
             let text = match value {
                 TermValue::EOF => {
                     println!(); // so log line doesn't show up on prompt line
-                    self.event_tx.send(ChannelEvent::Hangup).unwrap();
+                    self.event_tx.send(Message::Hangup).unwrap();
                     break;
                 }
                 TermValue::Text(s) => s,
@@ -127,7 +126,7 @@ impl Term {
                 continue;
             }
 
-            let msg = ChannelEvent::Message(ChannelMessage {
+            let msg = Message::Text(Event {
                 // TODO: fill these in properly
                 text,
                 is_public: false,
@@ -135,6 +134,7 @@ impl Term {
                 from_address: self.from_addr.clone(),
                 conversation_address: self.default_public_reply_addr.clone(),
                 origin: self.name.clone(),
+                user: None,
             });
 
             self.event_tx.send(msg).unwrap();

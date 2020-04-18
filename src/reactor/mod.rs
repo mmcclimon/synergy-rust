@@ -1,9 +1,11 @@
 pub mod echo;
 
+use std::sync::mpsc;
+
 use serde::Deserialize;
 
 use crate::config::ComponentConfig;
-use crate::event::Event;
+use crate::message::{Event, Message, Reply};
 
 // known reactors
 #[derive(Deserialize, Debug)]
@@ -13,8 +15,13 @@ pub enum Type {
 
 pub type ReactorConfig = ComponentConfig<Type>;
 
-pub trait Reactor {
-    fn name(&self) -> String;
+pub struct Seed {
+    pub name: String,
+    pub config: ReactorConfig,
+    pub event_handle: mpsc::Receiver<Message<Event>>,
+    pub reply_handle: mpsc::Sender<Message<Reply>>,
+}
 
-    fn react_to(&self, event: &Event) -> ();
+pub trait Reactor {
+    // TODO
 }

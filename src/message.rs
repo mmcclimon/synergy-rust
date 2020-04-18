@@ -1,45 +1,15 @@
 use crate::user::User;
 
+#[derive(Debug)]
+pub enum Message<T> {
+    Text(T),
+    Hangup,
+}
+
 // FIXME all these names are terrible.
 
-#[derive(Debug)]
-pub enum ChannelEvent {
-    Message(ChannelMessage),
-    Hangup,
-}
-
-#[derive(Debug)]
-pub enum ChannelReply {
-    Message(Reply),
-    Hangup,
-}
-
-#[derive(Debug)]
-pub struct ChannelMessage {
-    pub text: String,
-    pub is_public: bool,
-    pub was_targeted: bool,
-    pub from_address: String,
-    pub conversation_address: String,
-    pub origin: String,
-}
-
 #[derive(Debug, Clone)]
-pub enum ReactorEvent {
-    Message(ReactorMessage),
-    Hangup,
-}
-
-#[derive(Debug)]
-pub enum ReactorReply {
-    Message(Reply),
-
-    #[allow(dead_code)] // this is here for completeness
-    Hangup,
-}
-
-#[derive(Debug, Clone)]
-pub struct ReactorMessage {
+pub struct Event {
     pub text: String,
     pub is_public: bool,
     pub was_targeted: bool,
@@ -61,23 +31,14 @@ pub struct Reply {
     pub destination: String,
 }
 
-impl ReactorMessage {
-    pub fn reply(&self, text: &str, origin: &str) -> ReactorReply {
-        ReactorReply::Message(Reply {
+impl Event {
+    pub fn reply(&self, text: &str, origin: &str) -> Message<Reply> {
+        Message::Text(Reply {
             text: text.to_string(),
             from_address: self.from_address.clone(),
             conversation_address: self.conversation_address.clone(),
             origin: origin.to_string(),
             destination: self.origin.clone(),
         })
-    }
-}
-
-impl From<ReactorReply> for ChannelReply {
-    fn from(r: ReactorReply) -> Self {
-        match r {
-            ReactorReply::Message(reply) => ChannelReply::Message(reply.clone()),
-            ReactorReply::Hangup => ChannelReply::Hangup,
-        }
     }
 }

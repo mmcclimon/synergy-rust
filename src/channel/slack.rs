@@ -6,9 +6,8 @@ use std::fmt;
 use std::sync::mpsc;
 use std::thread;
 
-use crate::channel::{Channel, ReplyResponse};
-use crate::hub::ChannelSeed;
-use crate::message::{ChannelEvent, ChannelMessage, ChannelReply, Reply};
+use crate::channel::{Channel, ReplyResponse, Seed};
+use crate::message::{Event, Message, Reply};
 use client::Client;
 
 pub struct Slack {
@@ -16,8 +15,8 @@ pub struct Slack {
     api_token: String,
     our_name: RefCell<Option<String>>,
     our_id: RefCell<Option<String>>,
-    event_tx: mpsc::Sender<ChannelEvent>,
-    reply_rx: mpsc::Receiver<ChannelReply>,
+    event_tx: mpsc::Sender<Message<Event>>,
+    reply_rx: mpsc::Receiver<Message<Reply>>,
     rtm_client: Client,
 }
 
@@ -34,7 +33,7 @@ impl fmt::Display for SlackInternalError {
     }
 }
 
-pub fn new(seed: ChannelSeed) -> Slack {
+pub fn new(seed: Seed) -> Slack {
     let api_token = &seed.config.extra["api_token"]
         .as_str()
         .expect("no api token in config!");
@@ -50,7 +49,7 @@ pub fn new(seed: ChannelSeed) -> Slack {
     }
 }
 
-pub fn start(seed: ChannelSeed) -> (String, thread::JoinHandle<()>) {
+pub fn start(seed: Seed) -> (String, thread::JoinHandle<()>) {
     let name = seed.name.clone();
 
     let handle = thread::spawn(move || {
@@ -62,7 +61,7 @@ pub fn start(seed: ChannelSeed) -> (String, thread::JoinHandle<()>) {
 }
 
 impl Channel for Slack {
-    fn receiver(&self) -> &mpsc::Receiver<ChannelReply> {
+    fn receiver(&self) -> &mpsc::Receiver<Message<Reply>> {
         &self.reply_rx
     }
 
@@ -89,7 +88,7 @@ impl Slack {
                 None => continue,
             };
 
-            let msg = ChannelEvent::Message(ChannelMessage {
+            let msg = Message::Text(Event {
                 // TODO: fill these in properly
                 text: raw_event.text,
                 is_public: false,
@@ -97,6 +96,7 @@ impl Slack {
                 from_address: raw_event.user,
                 conversation_address: raw_event.channel,
                 origin: self.name.clone(),
+                user: None,
             });
 
             self.event_tx.send(msg).unwrap();

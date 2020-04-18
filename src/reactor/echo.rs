@@ -1,16 +1,16 @@
 use std::sync::mpsc;
 use std::thread;
 
-use crate::hub::ReactorSeed;
-use crate::message::{ReactorEvent, ReactorMessage, ReactorReply};
+use crate::message::{Event, Message, Reply};
+use crate::reactor::Seed;
 
 pub struct Echo {
     name: String,
-    reply_tx: mpsc::Sender<ReactorReply>,
-    event_rx: mpsc::Receiver<ReactorEvent>,
+    reply_tx: mpsc::Sender<Message<Reply>>,
+    event_rx: mpsc::Receiver<Message<Event>>,
 }
 
-pub fn new(seed: ReactorSeed) -> Echo {
+pub fn new(seed: Seed) -> Echo {
     Echo {
         name: seed.name.clone(),
         reply_tx: seed.reply_handle,
@@ -18,7 +18,7 @@ pub fn new(seed: ReactorSeed) -> Echo {
     }
 }
 
-pub fn start(seed: ReactorSeed) -> (String, thread::JoinHandle<()>) {
+pub fn start(seed: Seed) -> (String, thread::JoinHandle<()>) {
     let name = seed.name.clone();
 
     let handle = thread::spawn(move || {
@@ -33,19 +33,19 @@ impl Echo {
     fn start(&self) {
         for reactor_event in &self.event_rx {
             match reactor_event {
-                ReactorEvent::Hangup => break,
-                ReactorEvent::Message(event) => {
+                Message::Hangup => break,
+                Message::Text(event) => {
                     self.handle_echo(&event);
                 }
             };
         }
     }
 
-    fn send(&self, reply: ReactorReply) {
+    fn send(&self, reply: Message<Reply>) {
         self.reply_tx.send(reply).unwrap()
     }
 
-    pub fn handle_echo(&self, event: &ReactorMessage) {
+    pub fn handle_echo(&self, event: &Event) {
         let who = match &event.user {
             Some(u) => &u.username,
             None => "someone",

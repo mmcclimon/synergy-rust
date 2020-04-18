@@ -5,7 +5,7 @@ use std::sync::{Arc, Weak};
 use rusqlite::NO_PARAMS;
 
 use crate::environment::Environment;
-use crate::message::ChannelMessage;
+use crate::message::Event;
 use crate::user::User;
 
 #[derive(Debug)]
@@ -88,7 +88,7 @@ impl Directory {
         }
     }
 
-    pub fn resolve_user(&self, event: &ChannelMessage) -> Option<User> {
+    pub fn resolve_user(&self, event: &Event) -> Option<User> {
         let idents = self.identities.borrow();
 
         let channel_identities = match idents.get(&event.origin) {
