@@ -96,9 +96,9 @@ impl Hub {
         channel_config: HashMap<String, ChannelConfig>,
     ) {
         for (raw_name, config) in channel_config {
-            let starter = match config.class {
-                channel::Type::SlackChannel => channel::slack::start,
-                channel::Type::TermChannel => channel::term::start,
+            let builder = match config.class {
+                channel::Type::SlackChannel => channel::slack::build,
+                channel::Type::TermChannel => channel::term::build,
             };
 
             let name = format!("channel/{}", raw_name);
@@ -116,7 +116,7 @@ impl Hub {
                 reply_handle: channel_rx,
             };
 
-            let (_addr, handle) = starter(seed);
+            let handle = builder(seed);
             self.child_handles.push(handle);
         }
     }
@@ -127,8 +127,8 @@ impl Hub {
         reactor_config: HashMap<String, ReactorConfig>,
     ) {
         for (raw_name, config) in reactor_config {
-            let starter = match config.class {
-                reactor::Type::EchoReactor => reactor::echo::start,
+            let builder = match config.class {
+                reactor::Type::EchoReactor => reactor::echo::build,
             };
 
             let name = format!("reactor/{}", raw_name);
@@ -144,7 +144,7 @@ impl Hub {
                 reply_handle: reply_tx.clone(),
             };
 
-            let (_addr, handle) = starter(seed);
+            let handle = builder(seed);
             self.child_handles.push(handle);
         }
     }

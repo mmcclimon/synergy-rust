@@ -33,6 +33,13 @@ impl fmt::Display for SlackInternalError {
     }
 }
 
+pub fn build(seed: Seed) -> thread::JoinHandle<()> {
+    thread::spawn(move || {
+        let channel = self::new(seed);
+        channel.start();
+    })
+}
+
 pub fn new(seed: Seed) -> Slack {
     let api_token = &seed.config.extra["api_token"]
         .as_str()
@@ -47,17 +54,6 @@ pub fn new(seed: Seed) -> Slack {
         reply_rx: seed.reply_handle,
         rtm_client: client::new(),
     }
-}
-
-pub fn start(seed: Seed) -> (String, thread::JoinHandle<()>) {
-    let name = seed.name.clone();
-
-    let handle = thread::spawn(move || {
-        let channel = self::new(seed);
-        channel.start();
-    });
-
-    (name, handle)
 }
 
 impl Channel for Slack {

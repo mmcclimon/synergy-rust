@@ -10,23 +10,19 @@ pub struct Echo {
     event_rx: mpsc::Receiver<Message<Event>>,
 }
 
+pub fn build(seed: Seed) -> thread::JoinHandle<()> {
+    thread::spawn(move || {
+        let reactor = self::new(seed);
+        reactor.start();
+    })
+}
+
 pub fn new(seed: Seed) -> Echo {
     Echo {
         name: seed.name.clone(),
         reply_tx: seed.reply_handle,
         event_rx: seed.event_handle,
     }
-}
-
-pub fn start(seed: Seed) -> (String, thread::JoinHandle<()>) {
-    let name = seed.name.clone();
-
-    let handle = thread::spawn(move || {
-        let channel = self::new(seed);
-        channel.start();
-    });
-
-    (name, handle)
 }
 
 impl Echo {

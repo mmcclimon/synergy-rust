@@ -22,15 +22,11 @@ enum TermValue {
     EOF,
 }
 
-pub fn start(seed: Seed) -> (String, thread::JoinHandle<()>) {
-    let name = seed.name.clone();
-
-    let handle = thread::spawn(move || {
+pub fn build(seed: Seed) -> thread::JoinHandle<()> {
+    thread::spawn(move || {
         let channel = self::new(seed);
         channel.start();
-    });
-
-    (name, handle)
+    })
 }
 
 pub fn new(seed: Seed) -> Term {
