@@ -6,8 +6,9 @@ use std::time::Duration;
 use colorful::Colorful;
 use toml::value::Value;
 
+use crate::channel::{Channel, ReplyResponse};
 use crate::hub::ChannelSeed;
-use crate::message::{ChannelEvent, ChannelMessage, ChannelReply};
+use crate::message::{ChannelEvent, ChannelMessage, ChannelReply, Reply};
 
 pub struct Term {
     pub name: String,
@@ -55,6 +56,22 @@ pub fn new(seed: ChannelSeed) -> Term {
     }
 }
 
+impl Channel for Term {
+    fn receiver(&self) -> &mpsc::Receiver<ChannelReply> {
+        &self.reply_rx
+    }
+
+    fn send_reply(&self, reply: Reply) {
+        let indented = reply.text.replace("\n", "\n  ");
+        let text = format!(
+            ">> {}!{} |\n  {}",
+            &self.name, &reply.conversation_address, indented,
+        );
+
+        println!("{}", text.magenta());
+    }
+}
+
 impl Term {
     fn start(&self) {
         // we need to kick off a thread for stdin so that we can read from it
@@ -69,27 +86,12 @@ impl Term {
         let mut stdout = io::stdout();
         let mut need_prompt = true;
 
-        'outer: loop {
-            'inner: loop {
-                // flush the queue
-                match self.reply_rx.try_recv() {
-                    Ok(ChannelReply::Hangup) => break 'outer,
-                    Ok(ChannelReply::Message(reply)) => {
-                        let indented = reply.text.replace("\n", "\n  ");
-                        let text = format!(
-                            ">> {}!{} |\n  {}",
-                            &self.name, &reply.conversation_address, indented,
-                        );
-
-                        println!("{}", text.magenta());
-                        need_prompt = true;
-                    }
-                    Err(mpsc::TryRecvError::Empty) => break 'inner,
-                    Err(mpsc::TryRecvError::Disconnected) => {
-                        panic!("hub hung up on us?");
-                    }
-                }
-            }
+        loop {
+            match self.catch_replies() {
+                ReplyResponse::Sent => need_prompt = true,
+                ReplyResponse::Hangup => break,
+                _ => (),
+            };
 
             if need_prompt {
                 print!("{}", "rustergy> ".cyan());

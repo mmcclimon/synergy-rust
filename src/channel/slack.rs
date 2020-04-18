@@ -6,8 +6,9 @@ use std::fmt;
 use std::sync::mpsc;
 use std::thread;
 
+use crate::channel::{Channel, ReplyResponse};
 use crate::hub::ChannelSeed;
-use crate::message::{ChannelEvent, ChannelMessage, ChannelReply};
+use crate::message::{ChannelEvent, ChannelMessage, ChannelReply, Reply};
 use client::Client;
 
 pub struct Slack {
@@ -60,6 +61,16 @@ pub fn start(seed: ChannelSeed) -> (String, thread::JoinHandle<()>) {
     (name, handle)
 }
 
+impl Channel for Slack {
+    fn receiver(&self) -> &mpsc::Receiver<ChannelReply> {
+        &self.reply_rx
+    }
+
+    fn send_reply(&self, reply: Reply) {
+        self.rtm_client.send(reply);
+    }
+}
+
 impl Slack {
     fn start(&self) {
         let me = self.rtm_client.connect(&self.api_token);
@@ -67,19 +78,11 @@ impl Slack {
         self.our_name.replace(Some(me.name));
         self.our_id.replace(Some(me.id));
 
-        'outer: loop {
-            'inner: loop {
-                match self.reply_rx.try_recv() {
-                    Ok(ChannelReply::Hangup) => break 'outer,
-                    Ok(ChannelReply::Message(reply)) => {
-                        self.rtm_client.send(reply);
-                    }
-                    Err(mpsc::TryRecvError::Empty) => break 'inner,
-                    Err(mpsc::TryRecvError::Disconnected) => {
-                        panic!("hub hung up on us?");
-                    }
-                }
-            }
+        loop {
+            match self.catch_replies() {
+                ReplyResponse::Hangup => break,
+                _ => (),
+            };
 
             let raw_event = match self.rtm_client.recv() {
                 Some(raw) => raw,
