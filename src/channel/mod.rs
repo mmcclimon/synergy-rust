@@ -34,9 +34,9 @@ pub struct Seed {
 pub trait Channel {
     fn receiver(&self) -> &mpsc::Receiver<Message<Reply>>;
 
-    fn send_reply(&self, r: Reply);
+    fn send_reply(&mut self, r: Reply);
 
-    fn catch_replies(&self) -> ReplyResponse {
+    fn catch_replies(&mut self) -> ReplyResponse {
         let mut did_send = false;
 
         loop {

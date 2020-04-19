@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use std::error::Error;
 use std::fmt;
 use std::io::ErrorKind::WouldBlock;
@@ -13,7 +12,7 @@ type Websocket = tungstenite::protocol::WebSocket<tungstenite::client::AutoStrea
 
 // boxes up our websocket
 pub struct RtmClient {
-    ws: RefCell<Option<Websocket>>,
+    ws: Option<Websocket>,
 }
 
 // This is a raw message event, and only matches messages, because that's the
@@ -60,21 +59,19 @@ impl fmt::Display for SlackInternalError {
 }
 
 pub fn new() -> RtmClient {
-    RtmClient {
-        ws: RefCell::new(None),
-    }
+    RtmClient { ws: None }
 }
 
 impl RtmClient {
-    pub fn connect(&self, api_token: &str) -> SlackIdentity {
+    pub fn connect(&mut self, api_token: &str) -> SlackIdentity {
         let (ws, me) = get_websocket(api_token).expect("Error connecting to slack!");
 
-        self.ws.replace(Some(ws));
+        self.ws = Some(ws);
 
         me
     }
 
-    pub fn send(&self, reply: Reply) {
+    pub fn send(&mut self, reply: Reply) {
         let to_send = OutgoingMessage {
             kind: "message".to_string(),
             text: reply.text,
@@ -85,15 +82,14 @@ impl RtmClient {
 
         debug!("writing message: {:?}", to_send);
         self.ws
-            .borrow_mut()
             .as_mut()
             .unwrap()
             .write_message(tungstenite::Message::Text(text))
             .unwrap();
     }
 
-    pub fn recv(&self) -> Option<RawEvent> {
-        let message = match self.ws.borrow_mut().as_mut().unwrap().read_message() {
+    pub fn recv(&mut self) -> Option<RawEvent> {
+        let message = match self.ws.as_mut().unwrap().read_message() {
             Ok(m) => m,
             Err(tungstenite::error::Error::Io(e)) => {
                 if e.kind() == WouldBlock {

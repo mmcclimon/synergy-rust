@@ -24,7 +24,7 @@ enum TermValue {
 
 pub fn build(seed: Seed) -> thread::JoinHandle<()> {
     thread::spawn(move || {
-        let channel = self::new(seed);
+        let mut channel = self::new(seed);
         channel.start();
     })
 }
@@ -56,7 +56,7 @@ impl Channel for Term {
         &self.reply_rx
     }
 
-    fn send_reply(&self, reply: Reply) {
+    fn send_reply(&mut self, reply: Reply) {
         let indented = reply.text.replace("\n", "\n  ");
         let text = format!(
             ">> {}!{} |\n  {}",
@@ -68,7 +68,7 @@ impl Channel for Term {
 }
 
 impl Term {
-    fn start(&self) {
+    fn start(&mut self) {
         // we need to kick off a thread for stdin so that we can read from it
         // non-blocking
         let (tx, stdin_rx) = mpsc::channel();

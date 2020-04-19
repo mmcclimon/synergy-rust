@@ -1,7 +1,6 @@
 mod api_client;
 mod rtm_client;
 
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
@@ -24,10 +23,10 @@ pub struct Slack {
     reply_rx: mpsc::Receiver<Message<Reply>>,
 
     // cached data
-    our_name: RefCell<Option<String>>,
-    our_id: RefCell<Option<String>>,
-    targeted_re: RefCell<Regex>, // I could use an option here, but.
-    users: RefCell<Option<HashMap<String, String>>>,
+    our_name: Option<String>,
+    our_id: Option<String>,
+    targeted_re: Regex, // I could use an option here, but.
+    users: Option<HashMap<String, String>>,
 }
 
 // XXX clean me up
@@ -45,7 +44,7 @@ impl fmt::Display for SlackInternalError {
 
 pub fn build(seed: Seed) -> thread::JoinHandle<()> {
     thread::spawn(move || {
-        let channel = self::new(seed);
+        let mut channel = self::new(seed);
         channel.start();
     })
 }
@@ -62,10 +61,10 @@ pub fn new(seed: Seed) -> Slack {
         reply_rx: seed.reply_handle,
         rtm_client: rtm_client::new(),
         api_client: api_client::new(api_token.to_string()),
-        our_id: RefCell::new(None),
-        our_name: RefCell::new(None),
-        targeted_re: RefCell::new(Regex::new("").unwrap()),
-        users: RefCell::new(None),
+        our_id: None,
+        our_name: None,
+        targeted_re: Regex::new("").unwrap(),
+        users: None,
     }
 }
 
@@ -74,24 +73,21 @@ impl Channel for Slack {
         &self.reply_rx
     }
 
-    fn send_reply(&self, reply: Reply) {
+    fn send_reply(&mut self, reply: Reply) {
         self.rtm_client.send(reply);
     }
 }
 
 impl Slack {
-    fn start(&self) {
+    fn start(&mut self) {
         let me = self.rtm_client.connect(&self.api_token);
 
-        let re = Regex::new(&format!(r"(?i)^@?{}:?\s*", me.name)).unwrap();
+        self.targeted_re = Regex::new(&format!(r"(?i)^@?{}:?\s*", me.name)).unwrap();
+        self.our_name = Some(me.name);
+        self.our_id = Some(me.id);
 
-        self.our_name.replace(Some(me.name));
-        self.our_id.replace(Some(me.id));
-        self.targeted_re.replace(re);
-
-        // these block: maybe it would be better not to do so.
-        let users = self.api_client.load_users();
-        self.users.replace(users);
+        // this block: maybe it would be better not to do so.
+        self.users = self.api_client.load_users();
 
         loop {
             match self.catch_replies() {
@@ -116,7 +112,7 @@ impl Slack {
     fn event_from_raw(&self, raw: RawEvent) -> Option<Event> {
         let text = self.decode_slack_formatting(raw.text);
 
-        let mut was_targeted = self.targeted_re.borrow().is_match(&text);
+        let mut was_targeted = self.targeted_re.is_match(&text);
 
         // anything in DM is targeted
         if raw.channel.starts_with("D") {
@@ -170,7 +166,6 @@ impl Slack {
     fn username_for(&self, slackid: &str) -> String {
         // TODO stop unwrap()ing so much
         self.users
-            .borrow()
             .as_ref()
             .unwrap()
             .get(slackid)
