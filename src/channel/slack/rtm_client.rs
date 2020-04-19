@@ -12,7 +12,7 @@ use crate::message::Reply;
 type Websocket = tungstenite::protocol::WebSocket<tungstenite::client::AutoStream>;
 
 // boxes up our websocket
-pub struct Client {
+pub struct RtmClient {
     ws: RefCell<Option<Websocket>>,
 }
 
@@ -59,13 +59,13 @@ impl fmt::Display for SlackInternalError {
     }
 }
 
-pub fn new() -> Client {
-    Client {
+pub fn new() -> RtmClient {
+    RtmClient {
         ws: RefCell::new(None),
     }
 }
 
-impl Client {
+impl RtmClient {
     pub fn connect(&self, api_token: &str) -> SlackIdentity {
         let (ws, me) = get_websocket(api_token).expect("Error connecting to slack!");
 

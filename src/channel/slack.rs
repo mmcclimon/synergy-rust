@@ -1,6 +1,8 @@
-mod client;
+mod api_client;
+mod rtm_client;
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 use std::sync::mpsc;
@@ -10,16 +12,21 @@ use regex::{Captures, Regex};
 
 use crate::channel::{Channel, ReplyResponse, Seed};
 use crate::message::{Event, Message, Reply};
-use client::{Client, RawEvent};
+use api_client::ApiClient;
+use rtm_client::{RawEvent, RtmClient};
 
 pub struct Slack {
     pub name: String,
     api_token: String,
-    our_name: RefCell<Option<String>>,
-    our_id: RefCell<Option<String>>,
+    rtm_client: RtmClient,
+    api_client: ApiClient,
     event_tx: mpsc::Sender<Message<Event>>,
     reply_rx: mpsc::Receiver<Message<Reply>>,
-    rtm_client: Client,
+
+    // cached data
+    our_name: RefCell<Option<String>>,
+    our_id: RefCell<Option<String>>,
+    users: RefCell<Option<HashMap<String, String>>>,
 }
 
 // XXX clean me up
@@ -50,11 +57,13 @@ pub fn new(seed: Seed) -> Slack {
     Slack {
         name: seed.name.clone(),
         api_token: api_token.to_string(),
-        our_id: RefCell::new(None),
-        our_name: RefCell::new(None),
         event_tx: seed.event_handle,
         reply_rx: seed.reply_handle,
-        rtm_client: client::new(),
+        rtm_client: rtm_client::new(),
+        api_client: api_client::new(api_token.to_string()),
+        our_id: RefCell::new(None),
+        our_name: RefCell::new(None),
+        users: RefCell::new(None),
     }
 }
 
@@ -74,6 +83,10 @@ impl Slack {
 
         self.our_name.replace(Some(me.name));
         self.our_id.replace(Some(me.id));
+
+        // these block: maybe it would be better not to do so.
+        let users = self.api_client.load_users();
+        self.users.replace(users);
 
         loop {
             match self.catch_replies() {
@@ -129,10 +142,12 @@ impl Slack {
 
         // TODO: here, swap slack userids for slack usernames (which we need to
         // look up)
-        let subbed_users =
-            USERNAME_RE.replace_all(&text, |caps: &Captures| format!("@user-{}", &caps[1]));
+        let subbed_users = USERNAME_RE.replace_all(&text, |caps: &Captures| {
+            let name = self.username_for(&caps[1]);
+            format!("@{}", name)
+        });
 
-        let subbed_channels = CHANNEL_RE.replace_all(&subbed_users, "#channel-$1");
+        let subbed_channels = CHANNEL_RE.replace_all(&subbed_users, "#$1");
         let subbed_mailto = MAILTO_RE.replace_all(&subbed_channels, "$1");
         let subbed_url = URL_RE.replace_all(&subbed_mailto, "$1");
 
@@ -146,5 +161,16 @@ impl Slack {
         out = out.replace("&amp;", "&");
 
         String::from(out)
+    }
+
+    fn username_for(&self, slackid: &str) -> String {
+        // TODO stop unwrap()ing so much
+        self.users
+            .borrow()
+            .as_ref()
+            .unwrap()
+            .get(slackid)
+            .unwrap()
+            .to_string()
     }
 }
