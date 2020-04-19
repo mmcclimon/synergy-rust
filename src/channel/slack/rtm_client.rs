@@ -131,7 +131,10 @@ impl RtmClient {
             }
         };
 
-        // debug!("got event {:?}", event);
+        if event.bot_id.is_some() {
+            return None;
+        }
+
         return Some(event);
     }
 }

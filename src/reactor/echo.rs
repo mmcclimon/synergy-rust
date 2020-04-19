@@ -47,6 +47,10 @@ impl Echo {
             None => "someone",
         };
 
+        if !event.was_targeted {
+            return;
+        }
+
         let text = format!("I heard {} say {}", who, event.text);
 
         self.send(event.reply(&text, &self.name));

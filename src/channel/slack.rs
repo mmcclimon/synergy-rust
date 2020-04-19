@@ -26,6 +26,7 @@ pub struct Slack {
     // cached data
     our_name: RefCell<Option<String>>,
     our_id: RefCell<Option<String>>,
+    targeted_re: RefCell<Regex>, // I could use an option here, but.
     users: RefCell<Option<HashMap<String, String>>>,
 }
 
@@ -63,6 +64,7 @@ pub fn new(seed: Seed) -> Slack {
         api_client: api_client::new(api_token.to_string()),
         our_id: RefCell::new(None),
         our_name: RefCell::new(None),
+        targeted_re: RefCell::new(Regex::new("").unwrap()),
         users: RefCell::new(None),
     }
 }
@@ -81,8 +83,11 @@ impl Slack {
     fn start(&self) {
         let me = self.rtm_client.connect(&self.api_token);
 
+        let re = Regex::new(&format!(r"(?i)^@?{}:?\s*", me.name)).unwrap();
+
         self.our_name.replace(Some(me.name));
         self.our_id.replace(Some(me.id));
+        self.targeted_re.replace(re);
 
         // these block: maybe it would be better not to do so.
         let users = self.api_client.load_users();
@@ -111,10 +116,9 @@ impl Slack {
     fn event_from_raw(&self, raw: RawEvent) -> Option<Event> {
         let text = self.decode_slack_formatting(raw.text);
 
-        let mut was_targeted = false;
+        let mut was_targeted = self.targeted_re.borrow().is_match(&text);
 
-        // check text
-
+        // anything in DM is targeted
         if raw.channel.starts_with("D") {
             was_targeted = true;
         }
