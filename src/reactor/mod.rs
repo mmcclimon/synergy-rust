@@ -24,6 +24,41 @@ pub struct Seed {
     pub reply_handle: mpsc::Sender<Message<Reply>>,
 }
 
-pub trait Reactor {
-    // TODO
+pub struct Handler<T> {
+    predicate: fn(&Event) -> bool,
+    require_targeted: bool,
+    magic: T,
+}
+
+impl<T> Handler<T> {
+    pub fn matches(&self, e: &Event) -> bool {
+        (self.predicate)(e)
+    }
+}
+
+pub trait Reactor<T> {
+    fn handlers(&self) -> &Vec<Handler<T>>;
+    fn event_rx(&self) -> &mpsc::Receiver<Message<Event>>;
+    fn dispatch(&self, magic: &T, event: &Event);
+
+    fn start(&mut self) {
+        for reactor_event in self.event_rx() {
+            match reactor_event {
+                Message::Hangup => break,
+                Message::Text(event) => self.check_event(&event),
+            };
+        }
+    }
+
+    fn check_event(&self, event: &Event) {
+        for handler in self.handlers() {
+            if handler.require_targeted && !event.was_targeted {
+                continue;
+            }
+
+            if handler.matches(&event) {
+                self.dispatch(&handler.magic, &event);
+            }
+        }
+    }
 }

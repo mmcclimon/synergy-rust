@@ -2,17 +2,22 @@ use std::sync::mpsc;
 use std::thread;
 
 use crate::message::{Event, Message, Reply};
-use crate::reactor::Seed;
+use crate::reactor::{Handler, Reactor, Seed};
 
 pub struct Echo {
     name: String,
     reply_tx: mpsc::Sender<Message<Reply>>,
     event_rx: mpsc::Receiver<Message<Event>>,
+    handlers: Vec<Handler<Dispatch>>,
+}
+
+enum Dispatch {
+    HandleEcho,
 }
 
 pub fn build(seed: Seed) -> thread::JoinHandle<()> {
     thread::spawn(move || {
-        let reactor = self::new(seed);
+        let mut reactor = self::new(seed);
         reactor.start();
     })
 }
@@ -22,21 +27,31 @@ pub fn new(seed: Seed) -> Echo {
         name: seed.name.clone(),
         reply_tx: seed.reply_handle,
         event_rx: seed.event_handle,
+        handlers: vec![Handler {
+            require_targeted: true,
+            predicate: |_| true,
+            magic: Dispatch::HandleEcho,
+        }],
+    }
+}
+
+impl Reactor<Dispatch> for Echo {
+    fn handlers(&self) -> &Vec<Handler<Dispatch>> {
+        &self.handlers
+    }
+
+    fn event_rx(&self) -> &mpsc::Receiver<Message<Event>> {
+        &self.event_rx
+    }
+
+    fn dispatch(&self, thing: &Dispatch, event: &Event) {
+        match thing {
+            Dispatch::HandleEcho => self.handle_echo(&event),
+        };
     }
 }
 
 impl Echo {
-    fn start(&self) {
-        for reactor_event in &self.event_rx {
-            match reactor_event {
-                Message::Hangup => break,
-                Message::Text(event) => {
-                    self.handle_echo(&event);
-                }
-            };
-        }
-    }
-
     fn send(&self, reply: Message<Reply>) {
         self.reply_tx.send(reply).unwrap()
     }
@@ -46,10 +61,6 @@ impl Echo {
             Some(u) => &u.username,
             None => "someone",
         };
-
-        if !event.was_targeted {
-            return;
-        }
 
         let text = format!("I heard {} say {}", who, event.text);
 

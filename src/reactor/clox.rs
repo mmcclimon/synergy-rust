@@ -2,13 +2,17 @@ use std::sync::mpsc;
 use std::thread;
 
 use crate::message::{Event, Message, Reply};
-use crate::reactor::Seed;
+use crate::reactor::{Handler, Reactor, Seed};
 
 pub struct Clox {
     name: String,
     reply_tx: mpsc::Sender<Message<Reply>>,
     event_rx: mpsc::Receiver<Message<Event>>,
-    handlers: Vec<Handler>,
+    handlers: Vec<Handler<Dispatch>>,
+}
+
+enum Dispatch {
+    HandleClox,
 }
 
 pub fn build(seed: Seed) -> thread::JoinHandle<()> {
@@ -19,58 +23,51 @@ pub fn build(seed: Seed) -> thread::JoinHandle<()> {
 }
 
 pub fn new(seed: Seed) -> Clox {
-    Clox {
+    let mut reactor = Clox {
         name: seed.name.clone(),
         reply_tx: seed.reply_handle,
         event_rx: seed.event_handle,
         handlers: vec![],
-    }
+    };
+
+    // add our handlers
+    reactor.handlers.push(Handler {
+        predicate: |event| event.text.starts_with("clox"),
+        require_targeted: true,
+        magic: Dispatch::HandleClox,
+    });
+
+    reactor
 }
 
-pub struct Handler {
-    name: String,
-    predicate: fn(&Event) -> bool,
-    method: fn(&Clox, &Event) -> (),
-    require_targeted: bool,
+impl Reactor<Dispatch> for Clox {
+    fn handlers(&self) -> &Vec<Handler<Dispatch>> {
+        &self.handlers
+    }
+
+    fn event_rx(&self) -> &mpsc::Receiver<Message<Event>> {
+        &self.event_rx
+    }
+
+    fn dispatch(&self, thing: &Dispatch, event: &Event) {
+        match thing {
+            Dispatch::HandleClox => self.handle_clox(&event),
+        };
+    }
 }
 
 impl Clox {
-    fn start(&mut self) {
-        let h = Handler {
-            name: String::from("clox"),
-            predicate: |event| event.text.starts_with("clox"),
-            method: handle_clox,
-            require_targeted: true,
-        };
-
-        self.handlers.push(h);
-
-        for reactor_event in &self.event_rx {
-            match reactor_event {
-                Message::Hangup => break,
-                Message::Text(event) => {
-                    for h in &self.handlers {
-                        if (h.predicate)(&event) {
-                            debug!("match");
-                            (h.method)(&self, &event);
-                        }
-                    }
-                }
-            };
-        }
-    }
-
     fn send(&self, reply: Message<Reply>) {
         self.reply_tx.send(reply).unwrap()
     }
-}
 
-fn handle_clox(clox: &Clox, event: &Event) {
-    if !event.was_targeted {
-        return;
+    fn handle_clox(&self, event: &Event) {
+        if !event.was_targeted {
+            return;
+        }
+
+        let text = format!("would handle clox");
+
+        self.send(event.reply(&text, &self.name));
     }
-
-    let text = format!("would handle clox");
-
-    clox.send(event.reply(&text, &clox.name));
 }
