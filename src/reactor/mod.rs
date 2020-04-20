@@ -1,3 +1,4 @@
+pub mod clox;
 pub mod echo;
 
 use std::sync::mpsc;
@@ -11,6 +12,7 @@ use crate::message::{Event, Message, Reply};
 #[derive(Deserialize, Debug)]
 pub enum Type {
     EchoReactor,
+    CloxReactor,
 }
 
 pub type ReactorConfig = ComponentConfig<Type>;

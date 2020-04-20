@@ -129,6 +129,7 @@ impl Hub {
         for (raw_name, config) in reactor_config {
             let builder = match config.class {
                 reactor::Type::EchoReactor => reactor::echo::build,
+                reactor::Type::CloxReactor => reactor::clox::build,
             };
 
             let name = format!("reactor/{}", raw_name);
