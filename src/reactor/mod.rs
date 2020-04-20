@@ -24,6 +24,14 @@ pub struct Seed {
     pub reply_handle: mpsc::Sender<Message<Reply>>,
 }
 
+// Is this abstraction _just_ for the pun? Not quite!
+pub struct Core<D> {
+    name: String,
+    reply_tx: mpsc::Sender<Message<Reply>>,
+    event_rx: mpsc::Receiver<Message<Event>>,
+    handlers: Vec<Handler<D>>,
+}
+
 pub struct Handler<T> {
     predicate: fn(&Event) -> bool,
     require_targeted: bool,
@@ -36,17 +44,32 @@ impl<T> Handler<T> {
     }
 }
 
+impl<T> Core<T> {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn handlers(&self) -> &Vec<Handler<T>> {
+        &self.handlers
+    }
+
+    fn event_rx(&self) -> &mpsc::Receiver<Message<Event>> {
+        &self.event_rx
+    }
+
+    fn reply_tx(&self) -> &mpsc::Sender<Message<Reply>> {
+        &self.reply_tx
+    }
+}
+
 pub trait Reactor {
     type Dispatcher;
 
-    fn name(&self) -> &str;
-    fn handlers(&self) -> &Vec<Handler<Self::Dispatcher>>;
-    fn event_rx(&self) -> &mpsc::Receiver<Message<Event>>;
-    fn reply_tx(&self) -> &mpsc::Sender<Message<Reply>>;
+    fn core(&self) -> &Core<Self::Dispatcher>;
     fn dispatch(&self, key: &Self::Dispatcher, event: &Event);
 
     fn start(&mut self) {
-        for reactor_event in self.event_rx() {
+        for reactor_event in self.core().event_rx() {
             match reactor_event {
                 Message::Hangup => break,
                 Message::Text(event) => self.dispatch_event(&event),
@@ -55,7 +78,7 @@ pub trait Reactor {
     }
 
     fn dispatch_event(&self, event: &Event) {
-        for handler in self.handlers() {
+        for handler in self.core().handlers() {
             if handler.require_targeted && !event.was_targeted {
                 continue;
             }
@@ -67,7 +90,7 @@ pub trait Reactor {
     }
 
     fn reply_to(&self, event: &Event, text: &str) {
-        let reply = event.reply(text, self.name());
-        self.reply_tx().send(reply).unwrap();
+        let reply = event.reply(text, self.core().name());
+        self.core().reply_tx().send(reply).unwrap();
     }
 }

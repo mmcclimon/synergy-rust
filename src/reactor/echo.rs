@@ -1,14 +1,10 @@
-use std::sync::mpsc;
 use std::thread;
 
-use crate::message::{Event, Message, Reply};
-use crate::reactor::{Handler, Reactor, Seed};
+use crate::message::Event;
+use crate::reactor::{Core, Handler, Reactor, Seed};
 
 pub struct Echo {
-    name: String,
-    reply_tx: mpsc::Sender<Message<Reply>>,
-    event_rx: mpsc::Receiver<Message<Event>>,
-    handlers: Vec<Handler<Dispatch>>,
+    core: Core<Dispatch>,
 }
 
 pub enum Dispatch {
@@ -23,7 +19,7 @@ pub fn build(seed: Seed) -> thread::JoinHandle<()> {
 }
 
 pub fn new(seed: Seed) -> Echo {
-    Echo {
+    let core = Core {
         name: seed.name.clone(),
         reply_tx: seed.reply_handle,
         event_rx: seed.event_handle,
@@ -32,26 +28,16 @@ pub fn new(seed: Seed) -> Echo {
             predicate: |_| true,
             key: Dispatch::HandleEcho,
         }],
-    }
+    };
+
+    Echo { core }
 }
 
 impl Reactor for Echo {
     type Dispatcher = Dispatch;
 
-    fn name(&self) -> &str {
-        &self.name
-    }
-
-    fn handlers(&self) -> &Vec<Handler<Dispatch>> {
-        &self.handlers
-    }
-
-    fn event_rx(&self) -> &mpsc::Receiver<Message<Event>> {
-        &self.event_rx
-    }
-
-    fn reply_tx(&self) -> &mpsc::Sender<Message<Reply>> {
-        &self.reply_tx
+    fn core(&self) -> &Core<Dispatch> {
+        &self.core
     }
 
     fn dispatch(&self, key: &Dispatch, event: &Event) {
