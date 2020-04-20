@@ -36,23 +36,25 @@ impl<T> Handler<T> {
     }
 }
 
-pub trait Reactor<T> {
+pub trait Reactor {
+    type Dispatcher;
+
     fn name(&self) -> &str;
-    fn handlers(&self) -> &Vec<Handler<T>>;
+    fn handlers(&self) -> &Vec<Handler<Self::Dispatcher>>;
     fn event_rx(&self) -> &mpsc::Receiver<Message<Event>>;
     fn reply_tx(&self) -> &mpsc::Sender<Message<Reply>>;
-    fn dispatch(&self, key: &T, event: &Event);
+    fn dispatch(&self, key: &Self::Dispatcher, event: &Event);
 
     fn start(&mut self) {
         for reactor_event in self.event_rx() {
             match reactor_event {
                 Message::Hangup => break,
-                Message::Text(event) => self.check_event(&event),
+                Message::Text(event) => self.dispatch_event(&event),
             };
         }
     }
 
-    fn check_event(&self, event: &Event) {
+    fn dispatch_event(&self, event: &Event) {
         for handler in self.handlers() {
             if handler.require_targeted && !event.was_targeted {
                 continue;

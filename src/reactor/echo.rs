@@ -11,7 +11,7 @@ pub struct Echo {
     handlers: Vec<Handler<Dispatch>>,
 }
 
-enum Dispatch {
+pub enum Dispatch {
     HandleEcho,
 }
 
@@ -30,12 +30,14 @@ pub fn new(seed: Seed) -> Echo {
         handlers: vec![Handler {
             require_targeted: true,
             predicate: |_| true,
-            magic: Dispatch::HandleEcho,
+            key: Dispatch::HandleEcho,
         }],
     }
 }
 
-impl Reactor<Dispatch> for Echo {
+impl Reactor for Echo {
+    type Dispatcher = Dispatch;
+
     fn name(&self) -> &str {
         &self.name
     }
@@ -52,8 +54,8 @@ impl Reactor<Dispatch> for Echo {
         &self.reply_tx
     }
 
-    fn dispatch(&self, magic: &Dispatch, event: &Event) {
-        match magic {
+    fn dispatch(&self, key: &Dispatch, event: &Event) {
+        match key {
             Dispatch::HandleEcho => self.handle_echo(&event),
         };
     }

@@ -11,7 +11,7 @@ pub struct Clox {
     handlers: Vec<Handler<Dispatch>>,
 }
 
-enum Dispatch {
+pub enum Dispatch {
     HandleClox,
 }
 
@@ -23,7 +23,7 @@ pub fn build(seed: Seed) -> thread::JoinHandle<()> {
 }
 
 pub fn new(seed: Seed) -> Clox {
-    let mut reactor = Clox {
+    Clox {
         name: seed.name.clone(),
         reply_tx: seed.reply_handle,
         event_rx: seed.event_handle,
@@ -32,12 +32,12 @@ pub fn new(seed: Seed) -> Clox {
             require_targeted: true,
             key: Dispatch::HandleClox,
         }],
-    };
-
-    reactor
+    }
 }
 
-impl Reactor<Dispatch> for Clox {
+impl Reactor for Clox {
+    type Dispatcher = Dispatch;
+
     fn name(&self) -> &str {
         &self.name
     }
