@@ -36,6 +36,10 @@ pub fn new(seed: Seed) -> Echo {
 }
 
 impl Reactor<Dispatch> for Echo {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
     fn handlers(&self) -> &Vec<Handler<Dispatch>> {
         &self.handlers
     }
@@ -44,18 +48,18 @@ impl Reactor<Dispatch> for Echo {
         &self.event_rx
     }
 
-    fn dispatch(&self, thing: &Dispatch, event: &Event) {
-        match thing {
+    fn reply_tx(&self) -> &mpsc::Sender<Message<Reply>> {
+        &self.reply_tx
+    }
+
+    fn dispatch(&self, magic: &Dispatch, event: &Event) {
+        match magic {
             Dispatch::HandleEcho => self.handle_echo(&event),
         };
     }
 }
 
 impl Echo {
-    fn send(&self, reply: Message<Reply>) {
-        self.reply_tx.send(reply).unwrap()
-    }
-
     pub fn handle_echo(&self, event: &Event) {
         let who = match &event.user {
             Some(u) => &u.username,
@@ -63,7 +67,6 @@ impl Echo {
         };
 
         let text = format!("I heard {} say {}", who, event.text);
-
-        self.send(event.reply(&text, &self.name));
+        self.reply_to(&event, &text);
     }
 }

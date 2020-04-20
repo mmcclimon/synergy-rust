@@ -27,7 +27,7 @@ pub struct Seed {
 pub struct Handler<T> {
     predicate: fn(&Event) -> bool,
     require_targeted: bool,
-    magic: T,
+    key: T,
 }
 
 impl<T> Handler<T> {
@@ -37,9 +37,11 @@ impl<T> Handler<T> {
 }
 
 pub trait Reactor<T> {
+    fn name(&self) -> &str;
     fn handlers(&self) -> &Vec<Handler<T>>;
     fn event_rx(&self) -> &mpsc::Receiver<Message<Event>>;
-    fn dispatch(&self, magic: &T, event: &Event);
+    fn reply_tx(&self) -> &mpsc::Sender<Message<Reply>>;
+    fn dispatch(&self, key: &T, event: &Event);
 
     fn start(&mut self) {
         for reactor_event in self.event_rx() {
@@ -57,8 +59,13 @@ pub trait Reactor<T> {
             }
 
             if handler.matches(&event) {
-                self.dispatch(&handler.magic, &event);
+                self.dispatch(&handler.key, &event);
             }
         }
+    }
+
+    fn reply_to(&self, event: &Event, text: &str) {
+        let reply = event.reply(text, self.name());
+        self.reply_tx().send(reply).unwrap();
     }
 }

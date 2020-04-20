@@ -27,20 +27,20 @@ pub fn new(seed: Seed) -> Clox {
         name: seed.name.clone(),
         reply_tx: seed.reply_handle,
         event_rx: seed.event_handle,
-        handlers: vec![],
+        handlers: vec![Handler {
+            predicate: |event| event.text.starts_with("clox"),
+            require_targeted: true,
+            key: Dispatch::HandleClox,
+        }],
     };
-
-    // add our handlers
-    reactor.handlers.push(Handler {
-        predicate: |event| event.text.starts_with("clox"),
-        require_targeted: true,
-        magic: Dispatch::HandleClox,
-    });
 
     reactor
 }
 
 impl Reactor<Dispatch> for Clox {
+    fn name(&self) -> &str {
+        &self.name
+    }
     fn handlers(&self) -> &Vec<Handler<Dispatch>> {
         &self.handlers
     }
@@ -49,25 +49,20 @@ impl Reactor<Dispatch> for Clox {
         &self.event_rx
     }
 
-    fn dispatch(&self, thing: &Dispatch, event: &Event) {
-        match thing {
+    fn reply_tx(&self) -> &mpsc::Sender<Message<Reply>> {
+        &self.reply_tx
+    }
+
+    fn dispatch(&self, key: &Dispatch, event: &Event) {
+        match key {
             Dispatch::HandleClox => self.handle_clox(&event),
         };
     }
 }
 
 impl Clox {
-    fn send(&self, reply: Message<Reply>) {
-        self.reply_tx.send(reply).unwrap()
-    }
-
     fn handle_clox(&self, event: &Event) {
-        if !event.was_targeted {
-            return;
-        }
-
         let text = format!("would handle clox");
-
-        self.send(event.reply(&text, &self.name));
+        self.reply_to(&event, &text);
     }
 }
