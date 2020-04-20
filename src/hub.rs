@@ -38,8 +38,8 @@ impl Hub {
 
         // Send the sending end into the channel/reactor as appropriate. These
         // methods set up the other direction, and store themselves as state
-        self.assemble_channels(event_tx, config.channels);
         self.assemble_reactors(reply_tx, config.reactors);
+        self.assemble_channels(event_tx, config.channels);
 
         self.listen(event_rx, reply_rx);
     }
