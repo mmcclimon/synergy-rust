@@ -1,5 +1,8 @@
 use std::thread;
 
+use chrono::{FixedOffset, Timelike, Utc};
+use chrono_tz::Tz;
+
 use crate::message::Event;
 use crate::reactor::{Core, Handler, Reactor, Seed};
 
@@ -49,7 +52,35 @@ impl Reactor for Clox {
 
 impl Clox {
     fn handle_clox(&self, event: &Event) {
-        let text = format!("would handle clox");
+        let tzs = vec![
+            ("🇺🇸", "America/New_York"),
+            ("🇺🇳", "Etc/UTC"),
+            ("🇦🇹", "Europe/Vienna"),
+            ("🇮🇳", "Asia/Kolkata"),
+            ("🇦🇺", "Australia/Melbourne"),
+        ];
+
+        let now = Utc::now();
+        debug!("{:?}", now.timezone());
+
+        let sit = now.with_timezone(&FixedOffset::east(3600));
+        let beats = ((sit.second() + sit.minute() * 60 + sit.hour() * 3600) as f64 / 86.4) as u32;
+
+        let mut text = format!(
+            "In Internet Time™ it's {}@{:?}. That's...",
+            sit.format("%F"),
+            beats,
+        );
+
+        for (abbrev, tz_name) in &tzs {
+            let tz: Tz = tz_name.parse().unwrap();
+            text.push_str(&format!(
+                "\n{} {}",
+                abbrev,
+                now.with_timezone(&tz).format("%F %H:%M")
+            ));
+        }
+
         self.reply_to(&event, &text);
     }
 }
