@@ -96,11 +96,6 @@ impl Hub {
         channel_config: HashMap<String, ChannelConfig>,
     ) {
         for (raw_name, config) in channel_config {
-            let builder = match config.class {
-                channel::Type::SlackChannel => channel::slack::build,
-                channel::Type::TermChannel => channel::term::build,
-            };
-
             let name = format!("channel/{}", raw_name);
             info!("starting {}", name);
 
@@ -109,14 +104,7 @@ impl Hub {
             let (channel_tx, channel_rx) = mpsc::channel();
             self.channel_senders.insert(name.clone(), channel_tx);
 
-            let seed = channel::Seed {
-                name,
-                config,
-                event_handle: event_tx.clone(),
-                reply_handle: channel_rx,
-            };
-
-            let handle = builder(seed);
+            let handle = channel::build(name, config, event_tx.clone(), channel_rx);
             self.child_handles.push(handle);
         }
     }
@@ -127,25 +115,13 @@ impl Hub {
         reactor_config: HashMap<String, ReactorConfig>,
     ) {
         for (raw_name, config) in reactor_config {
-            let builder = match config.class {
-                reactor::Type::EchoReactor => reactor::echo::build,
-                reactor::Type::CloxReactor => reactor::clox::build,
-            };
-
             let name = format!("reactor/{}", raw_name);
             info!("starting {}", name);
 
             let (reactor_tx, reactor_rx) = mpsc::channel();
             self.reactor_senders.push(reactor_tx);
 
-            let seed = reactor::Seed {
-                name,
-                config,
-                event_handle: reactor_rx,
-                reply_handle: reply_tx.clone(),
-            };
-
-            let handle = builder(seed);
+            let handle = reactor::build(name, config, reply_tx.clone(), reactor_rx);
             self.child_handles.push(handle);
         }
     }

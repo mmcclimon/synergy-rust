@@ -2,6 +2,7 @@ pub mod slack;
 pub mod term;
 
 use std::sync::mpsc;
+use std::thread;
 
 use serde::Deserialize;
 
@@ -16,6 +17,27 @@ pub enum Type {
 }
 
 pub type ChannelConfig = config::ComponentConfig<Type>;
+
+pub fn build(
+    name: String,
+    config: ChannelConfig,
+    event_handle: mpsc::Sender<Message<Event>>,
+    reply_handle: mpsc::Receiver<Message<Reply>>,
+) -> thread::JoinHandle<()> {
+    let builder = match config.class {
+        Type::SlackChannel => slack::build,
+        Type::TermChannel => term::build,
+    };
+
+    let seed = Seed {
+        name,
+        config,
+        reply_handle,
+        event_handle,
+    };
+
+    builder(seed)
+}
 
 // stupid name
 pub enum ReplyResponse {

@@ -2,6 +2,7 @@ pub mod clox;
 pub mod echo;
 
 use std::sync::mpsc;
+use std::thread;
 
 use serde::Deserialize;
 
@@ -20,8 +21,29 @@ pub type ReactorConfig = ComponentConfig<Type>;
 pub struct Seed {
     pub name: String,
     pub config: ReactorConfig,
-    pub event_handle: mpsc::Receiver<Message<Event>>,
     pub reply_handle: mpsc::Sender<Message<Reply>>,
+    pub event_handle: mpsc::Receiver<Message<Event>>,
+}
+
+pub fn build(
+    name: String,
+    config: ReactorConfig,
+    reply_handle: mpsc::Sender<Message<Reply>>,
+    event_handle: mpsc::Receiver<Message<Event>>,
+) -> thread::JoinHandle<()> {
+    let builder = match config.class {
+        Type::EchoReactor => echo::build,
+        Type::CloxReactor => clox::build,
+    };
+
+    let seed = Seed {
+        name,
+        config,
+        reply_handle,
+        event_handle,
+    };
+
+    builder(seed)
 }
 
 // Is this abstraction _just_ for the pun? Not quite!
