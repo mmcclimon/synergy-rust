@@ -82,7 +82,7 @@ impl Slack {
     fn start(&mut self) {
         let me = self.rtm_client.connect(&self.api_token);
 
-        self.targeted_re = Regex::new(&format!(r"(?i)^@?{}:?\s*", me.name)).unwrap();
+        self.targeted_re = Regex::new(&format!(r"^(?i)@?{}:?\s+", me.name)).unwrap();
         self.our_name = Some(me.name);
         self.our_id = Some(me.id);
 
@@ -110,9 +110,13 @@ impl Slack {
     }
 
     fn event_from_raw(&self, raw: RawEvent) -> Option<Event> {
-        let text = self.decode_slack_formatting(raw.text);
+        let mut text = self.decode_slack_formatting(raw.text);
 
         let mut was_targeted = self.targeted_re.is_match(&text);
+
+        if was_targeted {
+            text = self.targeted_re.replace(&text, "").to_string();
+        }
 
         // anything in DM is targeted
         if raw.channel.starts_with("D") {
