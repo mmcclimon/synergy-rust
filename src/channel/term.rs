@@ -131,6 +131,7 @@ impl Term {
                 conversation_address: self.default_public_reply_addr.clone(),
                 origin: self.name.clone(),
                 user: None,
+                id: Event::new_id(),
             });
 
             self.event_tx.send(msg).unwrap();

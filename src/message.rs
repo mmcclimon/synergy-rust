@@ -1,3 +1,5 @@
+use uuid::Uuid;
+
 use crate::user::User;
 
 #[derive(Debug)]
@@ -17,6 +19,7 @@ pub struct Event {
     pub conversation_address: String,
     pub origin: String,
     pub user: Option<User>,
+    pub id: String,
 }
 
 // I think eventually, I want some sort of unique identifier per [channel]event,
@@ -32,6 +35,10 @@ pub struct Reply {
 }
 
 impl Event {
+    pub fn new_id() -> String {
+        format!("{}", Uuid::new_v4())
+    }
+
     pub fn reply(&self, text: &str, origin: &str) -> Message<Reply> {
         Message::Text(Reply {
             text: text.to_string(),

@@ -133,6 +133,7 @@ impl Slack {
             conversation_address: raw.channel,
             origin: self.name.clone(),
             user: None,
+            id: Event::new_id(),
         })
     }
 
