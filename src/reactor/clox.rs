@@ -61,7 +61,6 @@ impl Clox {
         ];
 
         let now = Utc::now();
-        debug!("{:?}", now.timezone());
 
         let sit = now.with_timezone(&FixedOffset::east(3600));
         let beats = ((sit.second() + sit.minute() * 60 + sit.hour() * 3600) as f64 / 86.4) as u32;
@@ -72,12 +71,33 @@ impl Clox {
             beats,
         );
 
+        // TODO
+        let user_time = now.with_timezone(&"America/New_York".parse::<Tz>().unwrap());
+
         for (abbrev, tz_name) in &tzs {
             let tz: Tz = tz_name.parse().unwrap();
+            let local = now.with_timezone(&tz);
+
+            let day_delta = local
+                .naive_local()
+                .date()
+                .signed_duration_since(user_time.naive_local().date())
+                .num_days();
+
+            let pretty_day = match day_delta {
+                -2 => String::from("the day before yesterday"),
+                -1 => String::from("yesterday"),
+                0 => String::from("today"),
+                1 => String::from("tomorrow"),
+                2 => String::from("the day after tomorrow"),
+                _ => format!("{}", local.format("%F")),
+            };
+
             text.push_str(&format!(
-                "\n{} {}",
+                "\n{} {} at {}",
                 abbrev,
-                now.with_timezone(&tz).format("%F %H:%M")
+                pretty_day,
+                local.format("%H:%M"),
             ));
         }
 
