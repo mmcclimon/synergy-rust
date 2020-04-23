@@ -4,7 +4,6 @@ use std::io::Read;
 use std::path::Path;
 
 use serde::Deserialize;
-use toml;
 
 use crate::channel;
 use crate::reactor;

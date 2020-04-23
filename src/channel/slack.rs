@@ -4,7 +4,7 @@ mod rtm_client;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc};
 use std::thread;
 
 use regex::{Captures, Regex};
@@ -73,7 +73,7 @@ impl Channel for Slack {
         &self.reply_rx
     }
 
-    fn send_reply(&mut self, reply: Reply) {
+    fn send_reply(&mut self, reply: Arc<Reply>) {
         self.rtm_client.send(reply);
     }
 }
@@ -105,7 +105,7 @@ impl Slack {
                 None => continue,
             };
 
-            self.event_tx.send(Message::Text(event)).unwrap();
+            self.event_tx.send(Message::Text(Arc::new(event))).unwrap();
         }
     }
 

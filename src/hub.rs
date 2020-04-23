@@ -11,7 +11,6 @@ use crate::message::{Event, Message, Reply};
 use crate::reactor::{self, ReactorConfig};
 
 pub struct Hub {
-    // Almost certainly I want _something_ here, but not right now.
     child_handles: Vec<JoinHandle<()>>,
     channel_senders: HashMap<String, mpsc::Sender<Message<Reply>>>,
     reactor_senders: Vec<mpsc::Sender<Message<Event>>>,
@@ -47,7 +46,7 @@ pub fn new() -> Hub {
 struct PendingReply {
     count: u32,
     will_respond: bool,
-    event: Event,
+    event: Arc<Event>,
 }
 
 impl Hub {
@@ -90,8 +89,8 @@ impl Hub {
             // duration chosen by fair dice roll.
             match self.event_rx.recv_timeout(Duration::from_millis(15)) {
                 Ok(Message::Hangup) => self.shutdown(),
-                Ok(Message::Text(ref mut event)) => {
-                    self.transmogrify_event(event);
+                Ok(Message::Text(channel_event)) => {
+                    let event = self.transmogrify_event(channel_event);
 
                     // TODO this should be reference counted instead of cloned.
                     pending_replies.insert(
@@ -99,14 +98,14 @@ impl Hub {
                         PendingReply {
                             count: 0,
                             will_respond: false,
-                            event: event.clone(),
+                            event: Arc::clone(&event),
                         },
                     );
 
                     // pass it along into reactors
                     for tx in &self.reactor_senders {
-                        let cloned = event.clone();
-                        tx.send(Message::Text(cloned)).unwrap();
+                        let clone = Arc::clone(&event);
+                        tx.send(Message::Text(clone)).unwrap();
                     }
                 }
                 Ok(Message::Ack(_, _)) => panic!("events are not meant to send acks"),
@@ -190,8 +189,10 @@ impl Hub {
         process::exit(0);
     }
 
-    fn transmogrify_event(&self, event: &mut Event) {
-        let user = self.env.as_ref().unwrap().resolve_user(&event);
+    fn transmogrify_event(&self, orig: Arc<Event>) -> Arc<Event> {
+        let user = self.env.as_ref().unwrap().resolve_user(&orig);
+        let mut event = orig.dupe(); // silly, but ok
         event.user = user;
+        Arc::new(event)
     }
 }

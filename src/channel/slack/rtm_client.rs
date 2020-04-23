@@ -1,6 +1,7 @@
 use std::error::Error;
 use std::fmt;
 use std::io::ErrorKind::WouldBlock;
+use std::sync::Arc;
 use std::time::Duration;
 
 use reqwest::Url;
@@ -71,11 +72,11 @@ impl RtmClient {
         me
     }
 
-    pub fn send(&mut self, reply: Reply) {
+    pub fn send(&mut self, reply: Arc<Reply>) {
         let to_send = OutgoingMessage {
             kind: "message".to_string(),
-            text: reply.text,
-            channel: reply.conversation_address,
+            text: reply.text.clone(),
+            channel: reply.conversation_address.clone(),
         };
 
         let text = serde_json::to_string(&to_send).unwrap();
@@ -105,7 +106,7 @@ impl RtmClient {
             }
         };
 
-        return self.process_ws_message(message);
+        self.process_ws_message(message)
     }
 
     fn process_ws_message(&self, message: tungstenite::Message) -> Option<RawEvent> {
@@ -131,7 +132,7 @@ impl RtmClient {
             return None;
         }
 
-        return Some(event);
+        Some(event)
     }
 }
 

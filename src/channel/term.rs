@@ -1,5 +1,5 @@
 use std::io::{self, Write};
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc};
 use std::thread;
 use std::time::Duration;
 
@@ -56,7 +56,7 @@ impl Channel for Term {
         &self.reply_rx
     }
 
-    fn send_reply(&mut self, reply: Reply) {
+    fn send_reply(&mut self, reply: Arc<Reply>) {
         let indented = reply.text.replace("\n", "\n  ");
         let text = format!(
             ">> {}!{} |\n  {}",
@@ -122,7 +122,7 @@ impl Term {
                 continue;
             }
 
-            let msg = Message::Text(Event {
+            let msg = Message::Text(Arc::new(Event {
                 // TODO: fill these in properly
                 text,
                 is_public: false,
@@ -132,7 +132,7 @@ impl Term {
                 origin: self.name.clone(),
                 user: None,
                 id: Event::new_id(),
-            });
+            }));
 
             self.event_tx.send(msg).unwrap();
         }

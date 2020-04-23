@@ -1,17 +1,18 @@
+use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::user::User;
 
 #[derive(Debug)]
 pub enum Message<T> {
-    Text(T),
+    Text(Arc<T>),
     Hangup,
     Ack(String, bool),
 }
 
 // FIXME all these names are terrible.
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Event {
     pub text: String,
     pub is_public: bool,
@@ -41,12 +42,25 @@ impl Event {
     }
 
     pub fn reply(&self, text: &str, origin: &str) -> Message<Reply> {
-        Message::Text(Reply {
+        Message::Text(Arc::new(Reply {
             text: text.to_string(),
             from_address: self.from_address.clone(),
             conversation_address: self.conversation_address.clone(),
             origin: origin.to_string(),
             destination: self.origin.clone(),
-        })
+        }))
+    }
+
+    pub fn dupe(&self) -> Self {
+        Event {
+            text: self.text.clone(),
+            is_public: self.is_public,
+            was_targeted: self.was_targeted,
+            from_address: self.from_address.clone(),
+            conversation_address: self.conversation_address.clone(),
+            origin: self.origin.clone(),
+            user: self.user.clone(),
+            id: self.id.clone(),
+        }
     }
 }
