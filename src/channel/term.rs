@@ -13,8 +13,8 @@ pub struct Term {
     pub name: String,
     from_addr: String,
     default_public_reply_addr: String,
-    event_tx: mpsc::Sender<Message<Event>>,
-    reply_rx: mpsc::Receiver<Message<Reply>>,
+    event_tx: mpsc::Sender<Message>,
+    reply_rx: mpsc::Receiver<Message>,
 }
 
 enum TermValue {
@@ -52,11 +52,11 @@ pub fn new(seed: Seed) -> Term {
 }
 
 impl Channel for Term {
-    fn receiver(&self) -> &mpsc::Receiver<Message<Reply>> {
+    fn receiver(&self) -> &mpsc::Receiver<Message> {
         &self.reply_rx
     }
 
-    fn send_reply(&mut self, reply: Arc<Reply>) {
+    fn send_reply(&mut self, reply: Reply) {
         let indented = reply.text.replace("\n", "\n  ");
         let text = format!(
             ">> {}!{} |\n  {}",
@@ -122,7 +122,7 @@ impl Term {
                 continue;
             }
 
-            let msg = Message::Text(Arc::new(Event {
+            let msg = Message::Event(Arc::new(Event {
                 // TODO: fill these in properly
                 text,
                 is_public: false,

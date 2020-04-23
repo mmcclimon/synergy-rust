@@ -4,10 +4,11 @@ use uuid::Uuid;
 use crate::user::User;
 
 #[derive(Debug)]
-pub enum Message<T> {
-    Text(Arc<T>),
-    Hangup,
+pub enum Message {
+    Event(Arc<Event>),
+    Reply(Reply),
     Ack(String, bool),
+    Hangup,
 }
 
 // FIXME all these names are terrible.
@@ -41,14 +42,14 @@ impl Event {
         format!("{}", Uuid::new_v4())
     }
 
-    pub fn reply(&self, text: &str, origin: &str) -> Message<Reply> {
-        Message::Text(Arc::new(Reply {
+    pub fn reply(&self, text: &str, origin: &str) -> Message {
+        Message::Reply(Reply {
             text: text.to_string(),
             from_address: self.from_address.clone(),
             conversation_address: self.conversation_address.clone(),
             origin: origin.to_string(),
             destination: self.origin.clone(),
-        }))
+        })
     }
 
     pub fn dupe(&self) -> Self {

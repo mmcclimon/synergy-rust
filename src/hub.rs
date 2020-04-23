@@ -7,21 +7,21 @@ use std::time::Duration;
 use crate::channel::{self, ChannelConfig};
 use crate::config::Config;
 use crate::environment::{self, Environment};
-use crate::message::{Event, Message, Reply};
+use crate::message::{Event, Message};
 use crate::reactor::{self, ReactorConfig};
 
 pub struct Hub {
     child_handles: Vec<JoinHandle<()>>,
-    channel_senders: HashMap<String, mpsc::Sender<Message<Reply>>>,
-    reactor_senders: Vec<mpsc::Sender<Message<Event>>>,
+    channel_senders: HashMap<String, mpsc::Sender<Message>>,
+    reactor_senders: Vec<mpsc::Sender<Message>>,
     reactor_count: u32,
     env: Option<Arc<Environment>>,
 
     // channels, which are useful to have as attributes
-    event_tx: mpsc::Sender<Message<Event>>,
-    event_rx: mpsc::Receiver<Message<Event>>,
-    reply_tx: mpsc::Sender<Message<Reply>>,
-    reply_rx: mpsc::Receiver<Message<Reply>>,
+    event_tx: mpsc::Sender<Message>,
+    event_rx: mpsc::Receiver<Message>,
+    reply_tx: mpsc::Sender<Message>,
+    reply_rx: mpsc::Receiver<Message>,
 }
 
 pub fn new() -> Hub {
@@ -70,11 +70,11 @@ impl Hub {
             loop {
                 match self.reply_rx.try_recv() {
                     Ok(Message::Hangup) => self.shutdown(),
-                    Ok(Message::Text(reply)) => {
+                    Ok(Message::Reply(reply)) => {
                         // figure out the destination, then send it along
                         // debug!("sending reply into channel");
                         let tx = self.channel_senders.get(&reply.destination).unwrap();
-                        tx.send(Message::Text(reply)).unwrap();
+                        tx.send(Message::Reply(reply)).unwrap();
                     }
                     Ok(Message::Ack(id, this_resp)) => {
                         self.handle_ack(&mut pending_replies, id, this_resp);
@@ -83,13 +83,14 @@ impl Hub {
                     Err(mpsc::TryRecvError::Disconnected) => {
                         panic!("channel hung up on us??");
                     }
+                    _ => (),
                 }
             }
 
             // duration chosen by fair dice roll.
             match self.event_rx.recv_timeout(Duration::from_millis(15)) {
                 Ok(Message::Hangup) => self.shutdown(),
-                Ok(Message::Text(channel_event)) => {
+                Ok(Message::Event(channel_event)) => {
                     let event = self.transmogrify_event(channel_event);
 
                     // TODO this should be reference counted instead of cloned.
@@ -105,12 +106,12 @@ impl Hub {
                     // pass it along into reactors
                     for tx in &self.reactor_senders {
                         let clone = Arc::clone(&event);
-                        tx.send(Message::Text(clone)).unwrap();
+                        tx.send(Message::Event(clone)).unwrap();
                     }
                 }
                 Ok(Message::Ack(_, _)) => panic!("events are not meant to send acks"),
-                Err(mpsc::RecvTimeoutError::Timeout) => (),
                 Err(mpsc::RecvTimeoutError::Disconnected) => panic!("channel hung up on us??"),
+                _ => (),
             }
         }
     }

@@ -1,7 +1,6 @@
 use std::error::Error;
 use std::fmt;
 use std::io::ErrorKind::WouldBlock;
-use std::sync::Arc;
 use std::time::Duration;
 
 use reqwest::Url;
@@ -72,7 +71,7 @@ impl RtmClient {
         me
     }
 
-    pub fn send(&mut self, reply: Arc<Reply>) {
+    pub fn send(&mut self, reply: Reply) {
         let to_send = OutgoingMessage {
             kind: "message".to_string(),
             text: reply.text.clone(),

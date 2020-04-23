@@ -19,8 +19,8 @@ pub struct Slack {
     api_token: String,
     rtm_client: RtmClient,
     api_client: ApiClient,
-    event_tx: mpsc::Sender<Message<Event>>,
-    reply_rx: mpsc::Receiver<Message<Reply>>,
+    event_tx: mpsc::Sender<Message>,
+    reply_rx: mpsc::Receiver<Message>,
 
     // cached data
     our_name: Option<String>,
@@ -69,11 +69,11 @@ pub fn new(seed: Seed) -> Slack {
 }
 
 impl Channel for Slack {
-    fn receiver(&self) -> &mpsc::Receiver<Message<Reply>> {
+    fn receiver(&self) -> &mpsc::Receiver<Message> {
         &self.reply_rx
     }
 
-    fn send_reply(&mut self, reply: Arc<Reply>) {
+    fn send_reply(&mut self, reply: Reply) {
         self.rtm_client.send(reply);
     }
 }
@@ -105,7 +105,7 @@ impl Slack {
                 None => continue,
             };
 
-            self.event_tx.send(Message::Text(Arc::new(event))).unwrap();
+            self.event_tx.send(Message::Event(Arc::new(event))).unwrap();
         }
     }
 

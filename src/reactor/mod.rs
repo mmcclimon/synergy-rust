@@ -7,7 +7,7 @@ use std::thread;
 use serde::Deserialize;
 
 use crate::config::ComponentConfig;
-use crate::message::{Event, Message, Reply};
+use crate::message::{Event, Message};
 
 // known reactors
 #[derive(Deserialize, Debug)]
@@ -21,15 +21,15 @@ pub type ReactorConfig = ComponentConfig<Type>;
 pub struct Seed {
     pub name: String,
     pub config: ReactorConfig,
-    pub reply_handle: mpsc::Sender<Message<Reply>>,
-    pub event_handle: mpsc::Receiver<Message<Event>>,
+    pub reply_handle: mpsc::Sender<Message>,
+    pub event_handle: mpsc::Receiver<Message>,
 }
 
 pub fn build(
     name: String,
     config: ReactorConfig,
-    reply_handle: mpsc::Sender<Message<Reply>>,
-    event_handle: mpsc::Receiver<Message<Event>>,
+    reply_handle: mpsc::Sender<Message>,
+    event_handle: mpsc::Receiver<Message>,
 ) -> thread::JoinHandle<()> {
     let builder = match config.class {
         Type::EchoReactor => echo::build,
@@ -49,8 +49,8 @@ pub fn build(
 // Is this abstraction _just_ for the pun? Not quite!
 pub struct Core<D> {
     name: String,
-    reply_tx: mpsc::Sender<Message<Reply>>,
-    event_rx: mpsc::Receiver<Message<Event>>,
+    reply_tx: mpsc::Sender<Message>,
+    event_rx: mpsc::Receiver<Message>,
     handlers: Vec<Handler<D>>,
 }
 
@@ -76,11 +76,11 @@ impl<T> Core<T> {
         &self.handlers
     }
 
-    fn event_rx(&self) -> &mpsc::Receiver<Message<Event>> {
+    fn event_rx(&self) -> &mpsc::Receiver<Message> {
         &self.event_rx
     }
 
-    fn reply_tx(&self) -> &mpsc::Sender<Message<Reply>> {
+    fn reply_tx(&self) -> &mpsc::Sender<Message> {
         &self.reply_tx
     }
 }
@@ -95,7 +95,7 @@ pub trait Reactor {
         for reactor_event in self.core().event_rx() {
             match reactor_event {
                 Message::Hangup => break,
-                Message::Text(event) => self.dispatch_event(&event),
+                Message::Event(event) => self.dispatch_event(&event),
                 _ => (),
             };
         }
@@ -130,7 +130,7 @@ pub trait Reactor {
         }
     }
 
-    fn send_reply_to_hub(&self, msg: Message<Reply>) {
+    fn send_reply_to_hub(&self, msg: Message) {
         self.core().reply_tx().send(msg).unwrap();
     }
 

@@ -1,13 +1,13 @@
 pub mod slack;
 pub mod term;
 
-use std::sync::{mpsc, Arc};
+use std::sync::mpsc;
 use std::thread;
 
 use serde::Deserialize;
 
 use crate::config;
-use crate::message::{Event, Message, Reply};
+use crate::message::{Message, Reply};
 
 // known channels
 #[derive(Deserialize, Debug)]
@@ -21,8 +21,8 @@ pub type ChannelConfig = config::ComponentConfig<Type>;
 pub fn build(
     name: String,
     config: ChannelConfig,
-    event_handle: mpsc::Sender<Message<Event>>,
-    reply_handle: mpsc::Receiver<Message<Reply>>,
+    event_handle: mpsc::Sender<Message>,
+    reply_handle: mpsc::Receiver<Message>,
 ) -> thread::JoinHandle<()> {
     let builder = match config.class {
         Type::SlackChannel => slack::build,
@@ -49,14 +49,14 @@ pub enum ReplyResponse {
 pub struct Seed {
     pub name: String,
     pub config: ChannelConfig,
-    pub event_handle: mpsc::Sender<Message<Event>>,
-    pub reply_handle: mpsc::Receiver<Message<Reply>>,
+    pub event_handle: mpsc::Sender<Message>,
+    pub reply_handle: mpsc::Receiver<Message>,
 }
 
 pub trait Channel {
-    fn receiver(&self) -> &mpsc::Receiver<Message<Reply>>;
+    fn receiver(&self) -> &mpsc::Receiver<Message>;
 
-    fn send_reply(&mut self, r: Arc<Reply>);
+    fn send_reply(&mut self, r: Reply);
 
     fn catch_replies(&mut self) -> ReplyResponse {
         let mut did_send = false;
@@ -64,7 +64,7 @@ pub trait Channel {
         loop {
             match self.receiver().try_recv() {
                 Ok(Message::Hangup) => return ReplyResponse::Hangup,
-                Ok(Message::Text(reply)) => {
+                Ok(Message::Reply(reply)) => {
                     self.send_reply(reply);
                     did_send = true;
                 }
