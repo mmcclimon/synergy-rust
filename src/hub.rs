@@ -15,21 +15,31 @@ pub struct Hub {
     child_handles: Vec<JoinHandle<()>>,
     channel_senders: HashMap<String, mpsc::Sender<Message<Reply>>>,
     reactor_senders: Vec<mpsc::Sender<Message<Event>>>,
+    reactor_count: u32,
     env: Option<Arc<Environment>>,
 
-    // machinery for handling Does not compute.
-    reply_tx: Option<mpsc::Sender<Message<Reply>>>,
-    reactor_count: u32,
+    // channels, which are useful to have as attributes
+    event_tx: mpsc::Sender<Message<Event>>,
+    event_rx: mpsc::Receiver<Message<Event>>,
+    reply_tx: mpsc::Sender<Message<Reply>>,
+    reply_rx: mpsc::Receiver<Message<Reply>>,
 }
 
 pub fn new() -> Hub {
+    let (event_tx, event_rx) = mpsc::channel();
+    let (reply_tx, reply_rx) = mpsc::channel();
+
     Hub {
         child_handles: vec![],
         reactor_senders: vec![],
         channel_senders: HashMap::new(),
         reactor_count: 0,
-        reply_tx: None,
         env: None,
+
+        event_tx,
+        event_rx,
+        reply_tx,
+        reply_rx,
     }
 }
 
@@ -46,53 +56,20 @@ impl Hub {
 
         self.env = Some(environment::new(&config));
 
-        let (event_tx, event_rx) = mpsc::channel();
-        let (reply_tx, reply_rx) = mpsc::channel();
+        self.assemble_reactors(config.reactors);
+        self.assemble_channels(config.channels);
 
-        self.reply_tx = Some(reply_tx.clone());
-
-        // Send the sending end into the channel/reactor as appropriate. These
-        // methods set up the other direction, and store themselves as state
-        self.assemble_reactors(reply_tx, config.reactors);
-        self.assemble_channels(event_tx, config.channels);
-
-        self.listen(event_rx, reply_rx);
+        self.listen();
     }
 
-    fn handle_ack(
-        &self,
-        pending: &mut HashMap<String, PendingReply>,
-        id: String,
-        this_response: bool,
-    ) {
-        let r = pending.get_mut(&id).unwrap();
-        r.count += 1;
-        r.will_respond = this_response || r.will_respond;
-
-        // hey, everyone has responded!
-        if r.count == self.reactor_count {
-            // if we were targeted and nobody wanted to respond, say something!
-            if r.event.was_targeted && !r.will_respond {
-                let reply = r.event.reply("Does not compute.", "hub");
-                self.reply_tx.as_ref().unwrap().send(reply).unwrap();
-            }
-
-            pending.remove(&id);
-        }
-    }
-
-    pub fn listen(
-        &mut self,
-        event_rx: mpsc::Receiver<Message<Event>>,
-        reply_rx: mpsc::Receiver<Message<Reply>>,
-    ) {
+    pub fn listen(&mut self) {
         // id => pending
         let mut pending_replies: HashMap<String, PendingReply> = HashMap::new();
 
         loop {
             // write, then block on read.
             loop {
-                match reply_rx.try_recv() {
+                match self.reply_rx.try_recv() {
                     Ok(Message::Hangup) => self.shutdown(),
                     Ok(Message::Text(reply)) => {
                         // figure out the destination, then send it along
@@ -111,7 +88,7 @@ impl Hub {
             }
 
             // duration chosen by fair dice roll.
-            match event_rx.recv_timeout(Duration::from_millis(15)) {
+            match self.event_rx.recv_timeout(Duration::from_millis(15)) {
                 Ok(Message::Hangup) => self.shutdown(),
                 Ok(Message::Text(ref mut event)) => {
                     self.transmogrify_event(event);
@@ -139,11 +116,29 @@ impl Hub {
         }
     }
 
-    fn assemble_channels(
-        &mut self,
-        event_tx: mpsc::Sender<Message<Event>>,
-        channel_config: HashMap<String, ChannelConfig>,
+    fn handle_ack(
+        &self,
+        pending: &mut HashMap<String, PendingReply>,
+        id: String,
+        this_response: bool,
     ) {
+        let r = pending.get_mut(&id).unwrap();
+        r.count += 1;
+        r.will_respond = this_response || r.will_respond;
+
+        // hey, everyone has responded!
+        if r.count == self.reactor_count {
+            // if we were targeted and nobody wanted to respond, say something!
+            if r.event.was_targeted && !r.will_respond {
+                let reply = r.event.reply("Does not compute.", "hub");
+                self.reply_tx.send(reply).unwrap();
+            }
+
+            pending.remove(&id);
+        }
+    }
+
+    fn assemble_channels(&mut self, channel_config: HashMap<String, ChannelConfig>) {
         for (raw_name, config) in channel_config {
             let name = format!("channel/{}", raw_name);
             info!("starting {}", name);
@@ -153,16 +148,12 @@ impl Hub {
             let (channel_tx, channel_rx) = mpsc::channel();
             self.channel_senders.insert(name.clone(), channel_tx);
 
-            let handle = channel::build(name, config, event_tx.clone(), channel_rx);
+            let handle = channel::build(name, config, self.event_tx.clone(), channel_rx);
             self.child_handles.push(handle);
         }
     }
 
-    fn assemble_reactors(
-        &mut self,
-        reply_tx: mpsc::Sender<Message<Reply>>,
-        reactor_config: HashMap<String, ReactorConfig>,
-    ) {
+    fn assemble_reactors(&mut self, reactor_config: HashMap<String, ReactorConfig>) {
         for (raw_name, config) in reactor_config {
             self.reactor_count += 1;
 
@@ -172,7 +163,7 @@ impl Hub {
             let (reactor_tx, reactor_rx) = mpsc::channel();
             self.reactor_senders.push(reactor_tx);
 
-            let handle = reactor::build(name, config, reply_tx.clone(), reactor_rx);
+            let handle = reactor::build(name, config, self.reply_tx.clone(), reactor_rx);
             self.child_handles.push(handle);
         }
     }
