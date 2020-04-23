@@ -6,6 +6,7 @@ use crate::user::User;
 pub enum Message<T> {
     Text(T),
     Hangup,
+    Ack(String, bool),
 }
 
 // FIXME all these names are terrible.

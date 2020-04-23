@@ -72,6 +72,7 @@ pub trait Channel {
                 Err(mpsc::TryRecvError::Disconnected) => {
                     panic!("hub hung up on us?");
                 }
+                _ => (),
             }
         }
 

@@ -29,6 +29,7 @@ pub fn new(seed: Seed) -> Clox {
         handlers: vec![Handler {
             predicate: |event| event.text.starts_with("clox"),
             require_targeted: true,
+            will_respond: true,
             key: Dispatch::HandleClox,
         }],
     };

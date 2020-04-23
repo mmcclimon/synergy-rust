@@ -25,7 +25,8 @@ pub fn new(seed: Seed) -> Echo {
         event_rx: seed.event_handle,
         handlers: vec![Handler {
             require_targeted: true,
-            predicate: |_| true,
+            predicate: |e| e.text.starts_with("echo"),
+            will_respond: true,
             key: Dispatch::HandleEcho,
         }],
     };
