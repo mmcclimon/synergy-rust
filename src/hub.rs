@@ -18,15 +18,15 @@ pub struct Hub {
     env: Option<Arc<Environment>>,
 
     // channels, which are useful to have as attributes
-    event_tx: mpsc::Sender<Message>,
-    event_rx: mpsc::Receiver<Message>,
-    reply_tx: mpsc::Sender<Message>,
-    reply_rx: mpsc::Receiver<Message>,
+    channel_tx: mpsc::Sender<Message>,
+    channel_rx: mpsc::Receiver<Message>,
+    reactor_tx: mpsc::Sender<Message>,
+    reactor_rx: mpsc::Receiver<Message>,
 }
 
 pub fn new() -> Hub {
-    let (event_tx, event_rx) = mpsc::channel();
-    let (reply_tx, reply_rx) = mpsc::channel();
+    let (channel_tx, channel_rx) = mpsc::channel();
+    let (reactor_tx, reactor_rx) = mpsc::channel();
 
     Hub {
         child_handles: vec![],
@@ -35,10 +35,10 @@ pub fn new() -> Hub {
         reactor_count: 0,
         env: None,
 
-        event_tx,
-        event_rx,
-        reply_tx,
-        reply_rx,
+        channel_tx,
+        channel_rx,
+        reactor_tx,
+        reactor_rx,
     }
 }
 
@@ -68,7 +68,7 @@ impl Hub {
         loop {
             // write, then block on read.
             loop {
-                match self.reply_rx.try_recv() {
+                match self.reactor_rx.try_recv() {
                     Ok(Message::Hangup) => self.shutdown(),
                     Ok(Message::Reply(reply)) => {
                         // figure out the destination, then send it along
@@ -88,7 +88,7 @@ impl Hub {
             }
 
             // duration chosen by fair dice roll.
-            match self.event_rx.recv_timeout(Duration::from_millis(15)) {
+            match self.channel_rx.recv_timeout(Duration::from_millis(15)) {
                 Ok(Message::Hangup) => self.shutdown(),
                 Ok(Message::Event(channel_event)) => {
                     let event = self.transmogrify_event(channel_event);
@@ -131,7 +131,7 @@ impl Hub {
             // if we were targeted and nobody wanted to respond, say something!
             if r.event.was_targeted && !r.will_respond {
                 let reply = r.event.reply("Does not compute.", "hub");
-                self.reply_tx.send(reply).unwrap();
+                self.reactor_tx.send(reply).unwrap();
             }
 
             pending.remove(&id);
@@ -143,12 +143,15 @@ impl Hub {
             let name = format!("channel/{}", raw_name);
             info!("starting {}", name);
 
-            // we have to send a receiver into the channel, and keep track of
-            // our senders
-            let (channel_tx, channel_rx) = mpsc::channel();
-            self.channel_senders.insert(name.clone(), channel_tx);
+            // Hook up a line to this component. Into each channel we send:
+            // 1. A transmitter (its output): we have one of these in our state,
+            //    so we can just clone it.
+            // 2. A receiver (its input): we'll keep track of its sending in in
+            //    self.channel_senders
+            let (this_tx, this_rx) = mpsc::channel();
+            self.channel_senders.insert(name.clone(), this_tx);
 
-            let handle = channel::build(name, config, self.event_tx.clone(), channel_rx);
+            let handle = channel::build(name, config, self.channel_tx.clone(), this_rx);
             self.child_handles.push(handle);
         }
     }
@@ -160,10 +163,10 @@ impl Hub {
             let name = format!("reactor/{}", raw_name);
             info!("starting {}", name);
 
-            let (reactor_tx, reactor_rx) = mpsc::channel();
-            self.reactor_senders.push(reactor_tx);
+            let (this_tx, this_rx) = mpsc::channel();
+            self.reactor_senders.push(this_tx);
 
-            let handle = reactor::build(name, config, self.reply_tx.clone(), reactor_rx);
+            let handle = reactor::build(name, config, self.reactor_tx.clone(), this_rx);
             self.child_handles.push(handle);
         }
     }
