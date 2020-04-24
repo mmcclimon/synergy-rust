@@ -21,8 +21,8 @@ pub type ChannelConfig = config::ComponentConfig<Type>;
 pub fn build(
     name: String,
     config: ChannelConfig,
-    event_handle: mpsc::Sender<Message>,
-    reply_handle: mpsc::Receiver<Message>,
+    output: mpsc::Sender<Message>,
+    input: mpsc::Receiver<Message>,
 ) -> thread::JoinHandle<()> {
     let builder = match config.class {
         Type::SlackChannel => slack::build,
@@ -32,8 +32,8 @@ pub fn build(
     let seed = Seed {
         name,
         config,
-        reply_handle,
-        event_handle,
+        input,
+        output,
     };
 
     builder(seed)
@@ -49,8 +49,8 @@ pub enum ReplyResponse {
 pub struct Seed {
     pub name: String,
     pub config: ChannelConfig,
-    pub event_handle: mpsc::Sender<Message>,
-    pub reply_handle: mpsc::Receiver<Message>,
+    pub output: mpsc::Sender<Message>,
+    pub input: mpsc::Receiver<Message>,
 }
 
 pub trait Channel {

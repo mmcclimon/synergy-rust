@@ -19,8 +19,8 @@ pub struct Slack {
     api_token: String,
     rtm_client: RtmClient,
     api_client: ApiClient,
-    event_tx: mpsc::Sender<Message>,
-    reply_rx: mpsc::Receiver<Message>,
+    to_hub: mpsc::Sender<Message>,
+    from_hub: mpsc::Receiver<Message>,
 
     // cached data
     our_name: Option<String>,
@@ -57,8 +57,8 @@ pub fn new(seed: Seed) -> Slack {
     Slack {
         name: seed.name.clone(),
         api_token: api_token.to_string(),
-        event_tx: seed.event_handle,
-        reply_rx: seed.reply_handle,
+        to_hub: seed.output,
+        from_hub: seed.input,
         rtm_client: rtm_client::new(),
         api_client: api_client::new(api_token.to_string()),
         our_id: None,
@@ -70,7 +70,7 @@ pub fn new(seed: Seed) -> Slack {
 
 impl Channel for Slack {
     fn receiver(&self) -> &mpsc::Receiver<Message> {
-        &self.reply_rx
+        &self.from_hub
     }
 
     fn send_reply(&mut self, reply: Reply) {
@@ -105,7 +105,7 @@ impl Slack {
                 None => continue,
             };
 
-            self.event_tx.send(Message::Event(Arc::new(event))).unwrap();
+            self.to_hub.send(Message::Event(Arc::new(event))).unwrap();
         }
     }
 

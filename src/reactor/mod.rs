@@ -21,15 +21,15 @@ pub type ReactorConfig = ComponentConfig<Type>;
 pub struct Seed {
     pub name: String,
     pub config: ReactorConfig,
-    pub reply_handle: mpsc::Sender<Message>,
-    pub event_handle: mpsc::Receiver<Message>,
+    pub output: mpsc::Sender<Message>,
+    pub input: mpsc::Receiver<Message>,
 }
 
 pub fn build(
     name: String,
     config: ReactorConfig,
-    reply_handle: mpsc::Sender<Message>,
-    event_handle: mpsc::Receiver<Message>,
+    output: mpsc::Sender<Message>,
+    input: mpsc::Receiver<Message>,
 ) -> thread::JoinHandle<()> {
     let builder = match config.class {
         Type::EchoReactor => echo::build,
@@ -39,8 +39,8 @@ pub fn build(
     let seed = Seed {
         name,
         config,
-        reply_handle,
-        event_handle,
+        output,
+        input,
     };
 
     builder(seed)
@@ -49,8 +49,8 @@ pub fn build(
 // Is this abstraction _just_ for the pun? Not quite!
 pub struct Core<D> {
     name: String,
-    reply_tx: mpsc::Sender<Message>,
-    event_rx: mpsc::Receiver<Message>,
+    output: mpsc::Sender<Message>,
+    input: mpsc::Receiver<Message>,
     handlers: Vec<Handler<D>>,
 }
 
@@ -76,12 +76,12 @@ impl<T> Core<T> {
         &self.handlers
     }
 
-    fn event_rx(&self) -> &mpsc::Receiver<Message> {
-        &self.event_rx
+    fn input_channel(&self) -> &mpsc::Receiver<Message> {
+        &self.input
     }
 
-    fn reply_tx(&self) -> &mpsc::Sender<Message> {
-        &self.reply_tx
+    fn output_channel(&self) -> &mpsc::Sender<Message> {
+        &self.output
     }
 }
 
@@ -92,7 +92,7 @@ pub trait Reactor {
     fn dispatch(&self, key: &Self::Dispatcher, event: &Event);
 
     fn start(&mut self) {
-        for reactor_event in self.core().event_rx() {
+        for reactor_event in self.core().input_channel() {
             match reactor_event {
                 Message::Hangup => break,
                 Message::Event(event) => self.dispatch_event(&event),
@@ -131,7 +131,7 @@ pub trait Reactor {
     }
 
     fn send_reply_to_hub(&self, msg: Message) {
-        self.core().reply_tx().send(msg).unwrap();
+        self.core().output_channel().send(msg).unwrap();
     }
 
     fn ack(&self, id: &str, will_respond: bool) {

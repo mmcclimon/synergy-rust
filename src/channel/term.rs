@@ -13,8 +13,8 @@ pub struct Term {
     pub name: String,
     from_addr: String,
     default_public_reply_addr: String,
-    event_tx: mpsc::Sender<Message>,
-    reply_rx: mpsc::Receiver<Message>,
+    to_hub: mpsc::Sender<Message>,
+    from_hub: mpsc::Receiver<Message>,
 }
 
 enum TermValue {
@@ -44,8 +44,8 @@ pub fn new(seed: Seed) -> Term {
 
     Term {
         name: seed.name.clone(),
-        event_tx: seed.event_handle,
-        reply_rx: seed.reply_handle,
+        to_hub: seed.output,
+        from_hub: seed.input,
         from_addr: from.to_string(),
         default_public_reply_addr: reply_addr.to_string(),
     }
@@ -53,7 +53,7 @@ pub fn new(seed: Seed) -> Term {
 
 impl Channel for Term {
     fn receiver(&self) -> &mpsc::Receiver<Message> {
-        &self.reply_rx
+        &self.from_hub
     }
 
     fn send_reply(&mut self, reply: Reply) {
@@ -112,7 +112,7 @@ impl Term {
             let text = match value {
                 TermValue::EOF => {
                     println!(); // so log line doesn't show up on prompt line
-                    self.event_tx.send(Message::Hangup).unwrap();
+                    self.to_hub.send(Message::Hangup).unwrap();
                     break;
                 }
                 TermValue::Text(s) => s,
@@ -134,7 +134,7 @@ impl Term {
                 id: Event::new_id(),
             }));
 
-            self.event_tx.send(msg).unwrap();
+            self.to_hub.send(msg).unwrap();
         }
     }
 }

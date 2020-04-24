@@ -21,8 +21,8 @@ pub fn build(seed: Seed) -> thread::JoinHandle<()> {
 pub fn new(seed: Seed) -> Echo {
     let core = Core {
         name: seed.name.clone(),
-        reply_tx: seed.reply_handle,
-        event_rx: seed.event_handle,
+        output: seed.output,
+        input: seed.input,
         handlers: vec![Handler {
             require_targeted: true,
             predicate: |e| e.text.starts_with("echo"),

@@ -24,8 +24,8 @@ pub fn build(seed: Seed) -> thread::JoinHandle<()> {
 pub fn new(seed: Seed) -> Clox {
     let core = Core {
         name: seed.name.clone(),
-        reply_tx: seed.reply_handle,
-        event_rx: seed.event_handle,
+        output: seed.output,
+        input: seed.input,
         handlers: vec![Handler {
             predicate: |event| event.text.starts_with("clox"),
             require_targeted: true,
